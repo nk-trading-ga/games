@@ -7,6 +7,7 @@ import {
   BATTLE,
   CARD,
   EVOLVE,
+  BOSS,
   HUNT,
   FORM_SCALE,
   MOTION,
@@ -59,9 +60,18 @@ interface Fighter {
   /** A squash from landing or being hit, decaying back to 0. */
   squash: number;
   out: boolean;
+  /** How much bigger than a normal beast: a boss is huge. */
+  bigness: number;
+  /** A boss below half its puff: glowing red, hitting harder. */
+  enraged: boolean;
 }
 
 export type Outcome = "won" | "lost" | "caught" | "fled";
+
+/** A boss fight: a huge beast, a title, and a temper. */
+export interface BossFight {
+  title: string;
+}
 
 /** For a fight with a wild beast: the player's Critter Balls. */
 export interface Wild {
@@ -89,6 +99,7 @@ export class Battle {
     foeCritter: Critter,
     private readonly trainer: Trainer,
     private readonly wild?: Wild,
+    private readonly boss?: BossFight,
   ) {
     this.effects = new Effects(stage, clock, sounds);
     this.player = this.makeFighter(
@@ -118,6 +129,16 @@ export class Battle {
   ): Fighter {
     const s = side === "player" ? ARENA.playerSpot : ARENA.foeSpot;
     const spot = new THREE.Vector3(s.x, 0, s.z);
+    const isBoss = side === "foe" && this.boss !== undefined;
+    if (isBoss) {
+      // Further back, along the line from you to it, so all of it shows.
+      const away = new THREE.Vector3(
+        ARENA.foeSpot.x - ARENA.playerSpot.x,
+        0,
+        ARENA.foeSpot.z - ARENA.playerSpot.z,
+      ).normalize();
+      spot.addScaledVector(away, BOSS.pushBack);
+    }
     const other = side === "player" ? ARENA.foeSpot : ARENA.playerSpot;
     // Face the other critter, turned partway toward the camera so you see a
     // face and not just the back of a head. More so for your own, which
@@ -135,6 +156,11 @@ export class Battle {
       .addScaledVector(this.stage.screenRight, away * ARENA.cardBeside);
 
     const model = buildCritter(critter);
+    let bigness = 1;
+    if (isBoss) {
+      const tall = new THREE.Box3().setFromObject(model.group).max.y;
+      bigness = Math.max(1, Math.min(BOSS.scale, BOSS.maxHeight / tall));
+    }
     const root = new THREE.Group();
     root.add(model.group);
     root.position.copy(spot);
@@ -168,6 +194,8 @@ export class Battle {
       glow: 0,
       squash: 0,
       out: false,
+      bigness,
+      enraged: false,
     };
   }
 
@@ -179,11 +207,22 @@ export class Battle {
     );
     f.squash *= Math.exp(-dt * 9);
     const sq = MOTION.breathe * breathe - f.squash;
-    f.model.group.scale.set(1 - sq * 0.6, 1 + sq, 1 - sq * 0.6);
+    const k = f.bigness;
+    f.model.group.scale.set(
+      (1 - sq * 0.6) * k,
+      (1 + sq) * k,
+      (1 - sq * 0.6) * k,
+    );
     f.flash = Math.max(0, f.flash - dt);
     const hit = f.flash > 0 ? Math.min(1, f.flash / TIMING.hitFlash) : 0;
     const w = Math.max(hit, f.glow);
-    f.model.material.emissive.setRGB(w, w, w);
+    if (f.enraged && w < 0.05) {
+      // Enraged: a red glow, throbbing.
+      const r = 0.25 + 0.2 * Math.sin(this.clock.time * 8);
+      f.model.material.emissive.setRGB(r, 0, 0);
+    } else {
+      f.model.material.emissive.setRGB(w, w, w);
+    }
     // A Mega beast smoulders: dark sparks rising round it all the time.
     if (f.out && f.critter.form === 2 && Math.random() < 0.6) {
       const a = Math.random() * Math.PI * 2;
@@ -217,7 +256,9 @@ export class Battle {
   async run(): Promise<Outcome> {
     this.ui.setPuff("player", this.player.puff, this.player.maxPuff);
     this.ui.setPuff("foe", this.foe.puff, this.foe.maxPuff);
-    if (this.wild) {
+    if (this.boss) {
+      await this.bossIntro(this.boss);
+    } else if (this.wild) {
       this.ui.say(`A wild ${this.foe.critter.name} appeared!`);
       await this.emerge(this.foe);
     } else {
@@ -254,6 +295,11 @@ export class Battle {
       }
       await this.clock.wait(TIMING.betweenTurns);
 
+      if (this.boss && !this.foe.enraged) {
+        if (this.foe.puff <= this.foe.maxPuff * BOSS.rageAt) {
+          await this.enrage(this.foe);
+        }
+      }
       await this.use(this.foe, this.player, this.foeMove());
       if (this.player.puff <= 0) {
         await this.faint(this.player);
@@ -270,7 +316,9 @@ export class Battle {
    */
   private foeMove(): Move {
     const moves = this.foe.critter.moves;
-    if (this.foe.charge >= BATTLE.superCharge + 1) {
+    // An enraged boss doesn't wait as long for its super move.
+    const wait = this.foe.enraged ? BATTLE.superCharge : BATTLE.superCharge + 1;
+    if (this.foe.charge >= wait) {
       return moves[2];
     }
     return Math.random() < 0.4 ? moves[0] : moves[1];
@@ -359,7 +407,7 @@ export class Battle {
 
   /** How much bigger than the first form this fighter's form is. */
   private size(f: Fighter): number {
-    return FORM_SCALE[f.critter.form] ?? 1;
+    return (FORM_SCALE[f.critter.form] ?? 1) * f.bigness;
   }
 
   /** Where moves come out of: a little in front of the face. */
@@ -471,6 +519,9 @@ export class Battle {
     }
     if (attacker.side === "foe") {
       damage *= this.trainer.hitScale;
+      if (attacker.enraged) {
+        damage *= BOSS.rageHit;
+      }
     }
     damage = Math.round(damage);
     target.puff = Math.max(0, target.puff - damage);
@@ -677,6 +728,49 @@ export class Battle {
     }
   }
 
+  /**
+   * A boss arrives: the storm goes wild, a warning flashes up, the ground
+   * shakes, and it climbs out of a huge hole.
+   */
+  private async bossIntro(boss: BossFight): Promise<void> {
+    const name = this.foe.critter.name;
+    this.foe.card.root.visible = false;
+    this.stage.setStorm(true);
+    this.stage.strike();
+    this.sounds.play("thunder");
+    this.ui.bossWarning(name, boss.title);
+    this.stage.shake(0.15, 2);
+    await this.clock.wait(1.2);
+    this.stage.strike();
+    await this.clock.wait(1.4);
+    this.ui.say(`${name}, ${boss.title}, is here!`);
+    await this.emerge(this.foe);
+    this.stage.shake(0.3, 0.8);
+    this.sounds.cry(this.foe.critter);
+    await this.clock.wait(0.6);
+  }
+
+  /** Half its puff gone, a boss loses its temper. */
+  private async enrage(f: Fighter): Promise<void> {
+    f.enraged = true;
+    this.ui.say(`${f.critter.name} is ENRAGED! 😡`);
+    this.stage.strike();
+    this.stage.shake(0.25, 0.8);
+    this.sounds.cry(f.critter);
+    this.sounds.play("superHit");
+    this.effects.shockwave(f.spot, 0xff3b5c, 3);
+    this.stage.sparks.burst(this.middle(f), {
+      color: [0xff3b5c, 0x9a5bff, 0x1a0a20],
+      count: 80,
+      speed: 4,
+      lift: 2,
+      ttl: 1,
+      size: 1.6,
+      spherical: 1,
+    });
+    await this.clock.wait(1.4);
+  }
+
   /** A wild beast climbs up out of a dark hole in the floor. */
   private async emerge(f: Fighter): Promise<void> {
     f.card.root.visible = false;
@@ -688,7 +782,12 @@ export class Battle {
     hole.position.set(f.spot.x, 0.02, f.spot.z);
     this.stage.scene.add(hole);
     this.sounds.play("rise");
-    await this.clock.tween(0.5, t => hole.scale.setScalar(t * 1.2), Ease.out);
+    const holeSize = 1.2 * f.bigness;
+    await this.clock.tween(
+      0.5,
+      t => hole.scale.setScalar(t * holeSize),
+      Ease.out,
+    );
     f.root.visible = true;
     f.root.scale.setScalar(1);
     const depth = -2.2 * this.size(f);
@@ -712,7 +811,7 @@ export class Battle {
     this.sounds.cry(f.critter);
     this.stage.shake(0.12, 0.4);
     await this.clock.tween(0.4, t => {
-      hole.scale.setScalar(1.2 * (1 - t));
+      hole.scale.setScalar(holeSize * (1 - t));
     });
     this.stage.scene.remove(hole);
     hole.geometry.dispose();
@@ -892,6 +991,7 @@ export class Battle {
   /** Takes everything this battle put in the scene back out. */
   dispose(): void {
     this.alive = false;
+    this.stage.setStorm(false);
     for (const f of this.fighters) {
       this.stage.scene.remove(f.root, f.card.root);
       f.root.traverse(o => {

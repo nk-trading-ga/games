@@ -212,6 +212,20 @@ export class UI {
     p.root.style.setProperty("--critter", css(critter.colour));
   }
 
+  /** The great warning that a boss is coming. */
+  bossWarning(name: string, title: string): void {
+    const w = el("div", "boss-warning", this.root);
+    el("div", "boss-warning-top", w, "⚠️ BOSS BATTLE ⚠️");
+    el("div", "boss-warning-name", w, name);
+    el("div", "boss-warning-title", w, title);
+    window.setTimeout(() => w.remove(), 2600);
+  }
+
+  /** The foe's panel as a boss's: wide, across the top, in red. */
+  setBoss(on: boolean): void {
+    this.panels.foe.root.classList.toggle("panel-boss", on);
+  }
+
   /** The little label at the top: which fight, or how many balls. */
   setRound(text: string): void {
     this.round.textContent = text;

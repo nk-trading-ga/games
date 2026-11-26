@@ -412,3 +412,36 @@ export function statsOf(critter: Critter): {puff: number; power: number} {
     power: Math.round((FORM_HIT[form] ?? 1) * (1 + tier * 0.08) * 100),
   };
 }
+
+/** The boss fights, in order: one giant for each kind, then the king. */
+export interface BossDef {
+  /** The card of the beast it is, which beating it wins. */
+  n: number;
+  title: string;
+}
+
+const BOSS_TITLES: Record<Kind, string> = {
+  fire: "Lord of Flames",
+  water: "Terror of the Deep",
+  leaf: "Jungle Tyrant",
+  spark: "Storm Emperor",
+  rock: "Mountain Breaker",
+};
+
+export const BOSSES: ReadonlyArray<BossDef> = [
+  ...KINDS.map((kind, i) => {
+    // A generated beast of each kind in its Mega form, each on a different
+    // body plan so no two bosses look alike.
+    const body = BODIES[i];
+    const big = SPECIES.find(
+      c =>
+        c.index >= CRITTERS.length &&
+        c.tier < 4 &&
+        c.kind === kind &&
+        c.body === body,
+    );
+    const species = big ?? SPECIES[CRITTERS.length];
+    return {n: species.index * 3 + 3, title: BOSS_TITLES[kind]};
+  }),
+  {n: CARD_COUNT, title: "Ruler of the Darkness"},
+];

@@ -52,8 +52,19 @@ two halves (Pyrotooth, Mossgnash, Slateking), three moves and some facts.
 Three forms each makes 999 cards, and the Darkness King makes 1,000. Card art
 is drawn the first time a card is wanted, and the latest 90 are kept.
 
-**Home** has four things to do:
+**Home** has five things to do:
 
+- **👹 Boss Battles** — six bosses, one after another: a giant Mega beast of
+  each kind, each on a different body plan (the Lord of Flames, the Terror of
+  the Deep, the Jungle Tyrant, the Storm Emperor, the Mountain Breaker), and
+  last the Darkness King, Ruler of the Darkness. A boss arrives with a
+  warning, a storm of lightning and the ground shaking, and climbs out of a
+  huge hole; it is half as big again as a beast (never so tall its head leaves
+  the screen) and has a long puff bar. At half puff it is **enraged** — it
+  glows red, hits harder and uses its super move more. Beating one wins its
+  card, 3 packs and 5 Critter Balls, and opens the next; the Darkness King's is
+  card #1000. A boss win counts toward evolving. Numbers are `BOSS` in
+  `src/config.ts`.
 - **⚔️ Fight Trainers** — the four fights. Each win gives a booster pack and 2
   Critter Balls; beating all four gives 3 more packs.
 - **🌃 Hunt Wild Beasts** — a wild beast climbs out of a dark hole in the
@@ -132,7 +143,7 @@ src/
   anim.ts      a clock whose waits and tweens are promises
   ui.ts        pick screen, puff panels, moves, popups, result card
   audio.ts     every sound synthesised with Web Audio
-  save.ts      cards owned, packs, balls, your fighter, wins, trophies, sound
+  save.ts      cards owned, packs, balls, fighter, wins, bosses, trophies
 ```
 
 There are no model, texture or sound files. The card art is drawn at start-up,

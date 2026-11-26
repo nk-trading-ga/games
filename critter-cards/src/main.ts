@@ -1,9 +1,9 @@
 import "./style.css";
 import {Clock} from "./anim";
 import {Sounds} from "./audio";
-import {Battle, type Trainer} from "./battle";
+import {Battle, type BossFight, type Trainer} from "./battle";
 import {CardArt} from "./cards";
-import {BATTLE, EVOLVE, HUNT, PACKS} from "./config";
+import {BATTLE, BOSS, EVOLVE, HUNT, PACKS} from "./config";
 import {
   CRITTERS,
   SPECIES,
@@ -12,7 +12,7 @@ import {
   critterById,
   type Critter,
 } from "./critters";
-import {cardByNumber, randomCard, statsOf} from "./dex";
+import {BOSSES, cardByNumber, randomCard, statsOf} from "./dex";
 import {Menu} from "./menu";
 import {load, save, type SaveData} from "./save";
 import {Stage} from "./stage";
@@ -90,7 +90,12 @@ class Game {
     for (;;) {
       this.ui.hideAll();
       const choice = await this.menu.home(this.data);
-      if (choice === "fight") {
+      if (choice === "boss") {
+        const i = await this.menu.bosses(this.data);
+        if (i >= 0) {
+          await this.bossFight(i);
+        }
+      } else if (choice === "fight") {
         await this.ladder();
       } else if (choice === "hunt") {
         await this.hunt();
@@ -163,9 +168,15 @@ class Game {
       : `${before} evolved into ${evolved.name}! `;
   }
 
-  private newBattle(foe: Critter, trainer: Trainer, wild: boolean): Battle {
+  private newBattle(
+    foe: Critter,
+    trainer: Trainer,
+    wild: boolean,
+    boss?: BossFight,
+  ): Battle {
     const mine = cardByNumber(this.data.active);
     this.ui.showBattle(mine, foe, trainer.name, 0, 1);
+    this.ui.setBoss(boss !== undefined);
     return new Battle(
       this.stage,
       this.clock,
@@ -185,6 +196,7 @@ class Game {
             },
           }
         : undefined,
+      boss,
     );
   }
 
@@ -256,6 +268,61 @@ class Game {
         if (choice === "home") {
           return;
         }
+      }
+    }
+  }
+
+  /** A boss: huge, angry, and its card is the prize. */
+  private async bossFight(index: number): Promise<void> {
+    for (;;) {
+      const def = BOSSES[index];
+      const foe = cardByNumber(def.n);
+      const trainer: Trainer = {
+        name: "BOSS",
+        form: foe.form,
+        puff: BOSS.puff[index] ?? BOSS.puff[0],
+        hitScale: BOSS.hitScale[index] ?? BOSS.hitScale[0],
+      };
+      const battle = this.newBattle(foe, trainer, false, {title: def.title});
+      this.ui.setRound(`👹 Boss ${index + 1} of ${BOSSES.length}`);
+      this.battle = battle;
+      const outcome = await battle.run();
+      const me = cardByNumber(this.data.active);
+      if (outcome === "won") {
+        this.sounds.play("win");
+        await battle.celebrate();
+        const evolved = await this.afterWin(battle, me);
+        const isNew = this.own(def.n);
+        this.data.packs += BOSS.packs;
+        this.data.balls += BOSS.balls;
+        const first = index === this.data.bosses;
+        if (first) {
+          this.data.bosses++;
+        }
+        save(this.data);
+        const last = index === BOSSES.length - 1;
+        await this.ui.showResult(
+          last ? "👑 YOU BEAT THE DARKNESS KING! 👑" : "BOSS DEFEATED! 👹",
+          `${evolved}You won the ${foe.name} card${isNew ? " (NEW!)" : ""}, ${BOSS.packs} booster packs and ${BOSS.balls} Critter Balls!${first && !last ? ` Next boss: ${BOSSES[index + 1].title}.` : ""}`,
+          foe,
+          [{id: "home", label: "Home", main: true}],
+        );
+        battle.dispose();
+        return;
+      }
+      this.sounds.play("lose");
+      const choice = await this.ui.showResult(
+        "Knocked out!",
+        `${foe.name} is too strong for now! Try again, or catch and evolve more beasts first.`,
+        me,
+        [
+          {id: "retry", label: "Fight again!", main: true},
+          {id: "home", label: "Home"},
+        ],
+      );
+      battle.dispose();
+      if (choice === "home") {
+        return;
       }
     }
   }

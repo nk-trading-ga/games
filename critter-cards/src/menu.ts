@@ -9,12 +9,12 @@ import {
   rarityOf,
   type Critter,
 } from "./critters";
-import {CARD_COUNT, cardByNumber, statsOf} from "./dex";
+import {BOSSES, CARD_COUNT, cardByNumber, statsOf} from "./dex";
 
 // The screens between fights: home, booster packs, the card book, and a
 // card's details.
 
-export type HomeChoice = "fight" | "hunt" | "packs" | "cards";
+export type HomeChoice = "boss" | "fight" | "hunt" | "packs" | "cards";
 
 /** What the screens need to know, and to change, about the player's things. */
 export interface Collection {
@@ -22,6 +22,8 @@ export interface Collection {
   packs: number;
   balls: number;
   active: number;
+  /** How many of the bosses, in order, have been beaten. */
+  bosses: number;
 }
 
 const PER_PAGE = 20;
@@ -107,6 +109,15 @@ export class Menu {
         el("span", "home-sub", words, sub);
         return b;
       };
+      const boss = Math.min(c.bosses, BOSSES.length - 1);
+      big(
+        "boss",
+        "👹",
+        "Boss Battles",
+        c.bosses >= BOSSES.length
+          ? "You beat them all! Fight them again"
+          : `Boss ${boss + 1} of ${BOSSES.length}: ${BOSSES[boss].title}`,
+      );
       big("fight", "⚔️", "Fight Trainers", "Win packs and Critter Balls");
       big(
         "hunt",
@@ -215,6 +226,66 @@ export class Menu {
         });
       };
       show();
+    });
+  }
+
+  /**
+   * The bosses, in a row: the ones beaten, the next one to fight, and the
+   * rest locked. Resolves with the one picked, or -1 to go back.
+   */
+  bosses(c: Collection): Promise<number> {
+    return new Promise(resolve => {
+      const s = this.screen("bosses");
+      this.button(s, "close-button", "✕", () => {
+        this.hide();
+        resolve(-1);
+      });
+      el("h2", "screen-title", s, "👹 Boss Battles 👹");
+      el(
+        "p",
+        "screen-note",
+        s,
+        c.bosses >= BOSSES.length
+          ? "You beat every boss! Fight any of them again."
+          : "Beat a boss to win its card, 3 packs and 5 Critter Balls!",
+      );
+      const row = el("div", "boss-row", s);
+      BOSSES.forEach((boss, i) => {
+        const beaten = i < c.bosses;
+        const open = i <= c.bosses;
+        const slot = el(
+          "div",
+          `boss-slot${open ? "" : " locked"}${i === BOSSES.length - 1 ? " final" : ""}`,
+          row,
+        );
+        if (open) {
+          const critter = cardByNumber(boss.n);
+          const img = el("img", "boss-card", slot);
+          img.src = this.art.url(critter);
+          img.alt = critter.name;
+          el("div", "boss-title", slot, boss.title);
+          this.button(
+            slot,
+            beaten ? "small-button" : "big-button",
+            beaten ? "Fight again" : "FIGHT!",
+            () => {
+              this.hide();
+              resolve(i);
+            },
+          );
+          if (beaten) {
+            el("span", "boss-beaten", slot, "✔");
+          }
+        } else {
+          el("div", "boss-lock", slot, "🔒");
+          el(
+            "div",
+            "boss-title",
+            slot,
+            i === BOSSES.length - 1 ? "???" : boss.title,
+          );
+        }
+      });
     });
   }
 

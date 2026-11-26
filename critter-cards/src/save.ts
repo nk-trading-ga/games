@@ -14,6 +14,8 @@ export interface SaveData {
   /** Fights each species has won, by id. */
   wins: Record<string, number>;
   trophies: number;
+  /** Bosses beaten, in order. */
+  bosses: number;
   muted: boolean;
   /** The starter picked, from before there was a card book. */
   picked?: string;
@@ -27,6 +29,7 @@ function blank(): SaveData {
     active: 0,
     wins: {},
     trophies: 0,
+    bosses: 0,
     muted: false,
   };
 }
@@ -49,6 +52,7 @@ export function load(): SaveData {
         active: num(d.active),
         wins: record<number>(d.wins),
         trophies: num(d.trophies),
+        bosses: num(d.bosses),
         muted: d.muted === true,
         picked: typeof d.picked === "string" ? d.picked : undefined,
       };

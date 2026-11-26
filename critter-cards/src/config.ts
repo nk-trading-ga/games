@@ -206,3 +206,36 @@ export const HUNT = {
   /** Wild beasts hit softer than trainers' do. */
   hitScale: 0.55,
 };
+
+export const BOSS = {
+  /** How much bigger than a normal beast a boss stands. */
+  scale: 1.6,
+  /**
+   * But never taller than this, in world units: past it the head goes off the
+   * top of the screen. A tall boss is grown less than a squat one.
+   */
+  maxHeight: 3.3,
+  /**
+   * A boss stands this much further back than a trainer's beast, so all of
+   * it — head, horns, crown — fits on screen.
+   */
+  pushBack: 2.6,
+  /**
+   * Puff for each boss in turn, the last being the Darkness King, and how
+   * hard they hit. Low hitting for their size, so a child whose beast has
+   * evolved wins most boss fights; it takes a while, which is what makes it a
+   * boss. The Darkness King hits about 16 × 1.9 × 0.4 ≈ 12 a turn, 16 when
+   * enraged, so a Mega beast's 170 puff lasts the eleven or so turns it takes
+   * to bring down his 360.
+   */
+  puff: [200, 230, 260, 290, 320, 360] as const,
+  hitScale: [0.35, 0.36, 0.37, 0.38, 0.38, 0.4] as const,
+  /** Below this much of its puff, a boss is enraged: it glows and hits harder. */
+  rageAt: 0.5,
+  rageHit: 1.3,
+  /** What beating one wins. */
+  packs: 3,
+  balls: 5,
+  /** Seconds between flashes of lightning while a boss is out. */
+  stormGap: [0.8, 2] as const,
+};

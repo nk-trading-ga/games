@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import {ParticleBurst} from "../../shared/particles";
-import {ARENA, CAMERA, CITY, EFFECTS, STORM} from "./config";
+import {ARENA, BOSS, CAMERA, CITY, EFFECTS, STORM} from "./config";
 import {mulberry} from "./anim";
 import {makeBolt} from "./effects";
 import {Parts, outlined} from "./models";
@@ -55,6 +55,8 @@ export class Stage {
   private readonly flashColour = new THREE.Color(0x8f86c8);
   private readonly rng = mulberry(11);
   private nextStrike = 2;
+  /** A boss is out: the lightning comes much more often. */
+  private wild = false;
   private flashLeft = 0;
   private thunderIn = -1;
   private bolt?: THREE.Group;
@@ -379,6 +381,11 @@ export class Stage {
     };
   }
 
+  setStorm(wild: boolean): void {
+    this.wild = wild;
+    this.nextStrike = Math.min(this.nextStrike, wild ? 0.5 : 3);
+  }
+
   /** Lightning somewhere over the city you can see, now. */
   strike(): void {
     const seen = this.roofsInView();
@@ -422,7 +429,7 @@ export class Stage {
     this.nextStrike -= dt;
     if (this.nextStrike <= 0) {
       this.strike();
-      const [lo, hi] = STORM.gap;
+      const [lo, hi] = this.wild ? BOSS.stormGap : STORM.gap;
       this.nextStrike = lo + this.rng() * (hi - lo);
     }
     if (this.bolt) {
