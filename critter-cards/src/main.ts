@@ -97,11 +97,11 @@ class Game {
           save(this.data);
           const choice = await this.ui.showResult(
             "🏆 Champion! 🏆",
-            `${mine.name} beat every trainer! You're the best!`,
+            `${mine.name} crushed every trainer! Nobody can beat you!`,
             mine.id,
             [
               {id: "again", label: "Play again", main: true},
-              {id: "pick", label: "Pick a new critter"},
+              {id: "pick", label: "Pick a new beast"},
             ],
           );
           battle.dispose();
@@ -111,12 +111,12 @@ class Game {
           return;
         }
         const choice = await this.ui.showResult(
-          "You won! 🎉",
+          "You won! 💥",
           `${mine.name} beat ${trainer.name}! Next up: ${BATTLE.trainers[round].name}.`,
           mine.id,
           [
-            {id: "next", label: "Next battle!", main: true},
-            {id: "pick", label: "Pick a new critter"},
+            {id: "next", label: "Next fight!", main: true},
+            {id: "pick", label: "Pick a new beast"},
           ],
         );
         battle.dispose();
@@ -126,12 +126,12 @@ class Game {
       } else {
         this.sounds.play("lose");
         const choice = await this.ui.showResult(
-          "Oh no!",
-          `${mine.name} needs a little rest. Let's try again!`,
+          "Knocked out!",
+          `${mine.name} got knocked out! Shake it off and fight again!`,
           mine.id,
           [
-            {id: "retry", label: "Try again!", main: true},
-            {id: "pick", label: "Pick a new critter"},
+            {id: "retry", label: "Fight again!", main: true},
+            {id: "pick", label: "Pick a new beast"},
           ],
         );
         battle.dispose();

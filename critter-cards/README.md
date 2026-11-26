@@ -9,30 +9,34 @@ the repo root.
 
 ## How it plays
 
-1. **Pick your critter.** Five cards, each a different kind of critter. Tap one
+1. **Pick your beast.** Five cards, each a different kind of beast. Tap one
    to look at it, then tap **I pick …!**
 2. **Battle.** Each trainer's card floats up off the grass, shakes and glows,
    and their critter pops out of it. Then yours does.
 3. **Tap a move.** Every critter has three:
-   - a **bump** (💥) — it runs at the other critter;
+   - a **bump** (a bite, a slash, a smash) — it charges the other beast;
    - its **special move** — thrown from where it stands;
    - its **super move** (⭐) — greyed out until it has charged up over two
      turns, then it glows. Bigger, more of everything, and the screen shakes.
-4. When a critter runs out of **puff** it spins back into its card, and the
-   card turns face down for a rest.
+4. When a beast runs out of **puff** it is knocked out: it spins back into its
+   card, and the card turns face down.
 5. Beat all four other trainers to be **Champion** 🏆.
 
-Losing is gentle: your critter "needs a little rest" and you try that battle
-again. The other trainers hit softer than you do, so a child tapping anything
+Losing is gentle: your beast is knocked out and you fight that battle again. The other trainers hit softer than you do, so a child tapping anything
 at all wins most battles.
 
-| Critter   | Kind     | Special      | Super         |
-| --------- | -------- | ------------ | ------------- |
-| Emberpup  | 🔥 Fire  | Fire Ball    | Fire Storm    |
-| Splashfin | 💧 Water | Bubble Blast | Big Wave      |
-| Thornbun  | 🍃 Leaf  | Leaf Swirl   | Petal Storm   |
-| Sparkbug  | ⚡ Spark | Zap          | Thunder Storm |
-| Pebblet   | 🪨 Rock  | Rock Drop    | Rock Slide    |
+| Beast     | Kind     | What it is                          | Special      | Super           |
+| --------- | -------- | ----------------------------------- | ------------ | --------------- |
+| Blazefang | 🔥 Fire  | a horned wolf with a burning mane   | Fire Blast   | Inferno         |
+| Tidejaw   | 💧 Water | a shark that walks on land          | Water Cannon | Tsunami         |
+| Thornclaw | 🍃 Leaf  | a thorn-covered jungle giant        | Thorn Storm  | Jungle Fury     |
+| Voltsting | ⚡ Spark | a scorpion with a lightning tail    | Thunderbolt  | Lightning Storm |
+| Rockjaw   | 🪨 Rock  | a rock golem with lava in its chest | Boulder Drop | Earthquake      |
+
+The beasts are meant to look fearsome — glowing slit eyes under a scowl, fangs,
+claws, horns and spikes — and to hit hard: every hit shakes the screen and
+blasts a shockwave across the floor, and a bump rips red claw marks across the
+other beast. Nothing is gory, and losing is still gentle.
 
 A special or super move that is strong against the other critter's kind is a
 **Super hit!** for half as much again. Who beats whom is `STRONG_AGAINST` in

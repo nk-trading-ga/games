@@ -5,15 +5,19 @@ import type {Critter} from "./critters";
 // Every critter is built here out of spheres, cones and cylinders, each painted
 // one colour, then merged into one geometry: one draw call per critter, plus
 // one for its outline. They all stand with their feet at y = 0 and face +Z.
+//
+// They are meant to look fearsome: glowing slit eyes under a scowl, fangs,
+// claws, horns and spikes. Big and heavy, not round and cuddly.
 
 type V3 = readonly [number, number, number];
 
-const OUTLINE_COLOUR = 0x2a1d14;
+const OUTLINE_COLOUR = 0x1a1210;
 /** How far the outline shell is pushed out along the normals, in units. */
-const OUTLINE_WIDTH = 0.022;
+const OUTLINE_WIDTH = 0.026;
 
-const EYE_WHITE = 0xffffff;
-const PUPIL = 0x1d1a2a;
+const FANG = 0xfff6e0;
+const PUPIL = 0x120c0a;
+const MOUTH = 0x4a0f14;
 
 /** Collects painted parts and merges them into one geometry. */
 export class Parts {
@@ -59,13 +63,19 @@ export class Parts {
     this.add(new THREE.SphereGeometry(1, 20, 14), colour, at, s, rot);
   }
 
+  /** A rough lump: a faceted ball, which reads as rock or armour. */
+  lump(colour: number, at: V3, scale: V3 | number = 1, rot?: V3): void {
+    const s: V3 = typeof scale === "number" ? [scale, scale, scale] : scale;
+    this.add(new THREE.IcosahedronGeometry(1, 0), colour, at, s, rot);
+  }
+
   cone(colour: number, at: V3, r: number, h: number, rot?: V3): void {
-    this.add(new THREE.ConeGeometry(r, h, 16), colour, at, [1, 1, 1], rot);
+    this.add(new THREE.ConeGeometry(r, h, 12), colour, at, [1, 1, 1], rot);
   }
 
   rod(colour: number, at: V3, r: number, h: number, rot?: V3): void {
     this.add(
-      new THREE.CylinderGeometry(r, r, h, 10),
+      new THREE.CylinderGeometry(r, r * 0.85, h, 10),
       colour,
       at,
       [1, 1, 1],
@@ -73,26 +83,43 @@ export class Parts {
     );
   }
 
-  /** A round eye looking forward: white, pupil, and a glint. */
-  eye(at: V3, r: number): void {
-    this.ball(EYE_WHITE, at, r);
-    this.ball(PUPIL, [at[0], at[1], at[2] + r * 0.45], r * 0.62);
+  /**
+   * A glowing eye with a slit pupil, and a heavy brow slanting down toward
+   * the nose — the scowl is most of what makes a face look fierce. `side` is
+   * -1 for the left eye and 1 for the right.
+   */
+  eye(at: V3, r: number, glow: number, brow: number, side: number): void {
+    this.ball(glow, at, [r, r * 0.72, r * 0.6]);
     this.ball(
-      EYE_WHITE,
-      [at[0] + r * 0.22, at[1] + r * 0.25, at[2] + r * 0.95],
-      r * 0.2,
+      PUPIL,
+      [at[0], at[1], at[2] + r * 0.4],
+      [r * 0.22, r * 0.62, r * 0.3],
+    );
+    this.add(
+      new THREE.BoxGeometry(r * 2.6, r * 0.55, r * 0.9),
+      brow,
+      [at[0] + side * r * 0.1, at[1] + r * 0.75, at[2] + r * 0.15],
+      [1, 1, 1],
+      [0, 0, side * 0.45],
     );
   }
 
-  /** A little smile: half a thin ring, turned so it curves up. */
-  smile(at: V3, r: number): void {
-    this.add(
-      new THREE.TorusGeometry(r, r * 0.22, 6, 12, Math.PI),
-      OUTLINE_COLOUR,
-      at,
-      [1, 1, 1],
-      [0, 0, Math.PI],
-    );
+  /** A fang, pointing down from the top jaw (or up, with `up`). */
+  fang(at: V3, r: number, h: number, up = false): void {
+    this.cone(FANG, at, r, h, up ? [0, 0, 0] : [Math.PI, 0, 0]);
+  }
+
+  /** Three claws poking forward out of a foot or a fist. */
+  claws(at: V3, size: number, tilt = 0): void {
+    for (const dx of [-1, 0, 1]) {
+      this.cone(
+        FANG,
+        [at[0] + dx * size * 0.7, at[1], at[2]],
+        size * 0.35,
+        size * 1.1,
+        [Math.PI / 2 + tilt, 0, 0],
+      );
+    }
   }
 
   build(): THREE.BufferGeometry {
@@ -108,165 +135,286 @@ export class Parts {
   }
 }
 
-function emberpup(p: Parts, c: Critter): void {
-  const cream = 0xffe2b8;
-  const dark = 0xe0611f;
-  p.ball(c.colour, [0, 0.5, 0], [0.42, 0.36, 0.55]);
-  p.ball(cream, [0, 0.43, 0.08], [0.32, 0.26, 0.42]);
-  for (const x of [-0.22, 0.22]) {
-    for (const z of [-0.28, 0.28]) {
-      p.rod(dark, [x, 0.17, z], 0.09, 0.32);
-      p.ball(cream, [x, 0.04, z + 0.03], [0.1, 0.06, 0.12]);
+/** A wolf of fire: horns, a burning mane and tail, and a mouth full of fangs. */
+function blazefang(p: Parts, c: Critter): void {
+  const dark = 0x2e1612;
+  const flame = 0xff8a1f;
+  const yellow = 0xffd23a;
+  p.ball(c.colour, [0, 0.74, -0.05], [0.42, 0.42, 0.72]);
+  p.ball(c.colour, [0, 0.86, 0.36], [0.42, 0.44, 0.42]);
+  p.ball(dark, [0, 0.6, 0.05], [0.32, 0.28, 0.56]);
+  for (const s of [-1, 1]) {
+    for (const z of [0.38, -0.45]) {
+      p.rod(dark, [s * 0.25, 0.3, z], 0.12, 0.56);
+      p.ball(dark, [s * 0.25, 0.06, z + 0.04], [0.14, 0.08, 0.18]);
+      p.claws([s * 0.25, 0.05, z + 0.21], 0.07);
     }
   }
-  p.ball(c.colour, [0, 0.98, 0.32], 0.38);
-  p.ball(cream, [0, 0.87, 0.62], [0.2, 0.15, 0.16]);
-  p.ball(OUTLINE_COLOUR, [0, 0.93, 0.77], 0.05);
-  p.smile([0, 0.84, 0.75], 0.05);
-  p.eye([-0.15, 1.06, 0.62], 0.085);
-  p.eye([0.15, 1.06, 0.62], 0.085);
+  p.ball(c.colour, [0, 1.2, 0.62], [0.34, 0.3, 0.36]);
+  p.ball(c.colour, [0, 1.1, 0.95], [0.2, 0.14, 0.25]);
+  p.ball(dark, [0, 1.15, 1.18], 0.055);
+  // The jaw hangs open under the snout, fangs over it.
+  p.ball(MOUTH, [0, 1.0, 0.92], [0.17, 0.08, 0.2]);
+  p.ball(dark, [0, 0.95, 0.9], [0.17, 0.05, 0.21]);
   for (const s of [-1, 1]) {
-    p.cone(c.colour, [s * 0.22, 1.32, 0.24], 0.13, 0.32, [0, 0, -s * 0.35]);
-    p.cone(0xd8402a, [s * 0.21, 1.3, 0.3], 0.08, 0.22, [0, 0, -s * 0.35]);
+    p.fang([s * 0.1, 1.01, 1.1], 0.035, 0.13);
+    p.fang([s * 0.07, 0.98, 1.06], 0.025, 0.08, true);
+    p.eye([s * 0.15, 1.27, 0.89], 0.07, 0xffe14a, dark, s);
+    p.cone(dark, [s * 0.17, 1.52, 0.5], 0.07, 0.44, [-0.7, 0, -s * 0.3]);
+    p.cone(c.colour, [s * 0.26, 1.42, 0.58], 0.09, 0.22, [-0.2, 0, -s * 0.5]);
   }
-  // The flame of a tail, three cones inside each other leaning back.
-  p.cone(0xff4a1c, [0, 0.82, -0.66], 0.17, 0.55, [-0.6, 0, 0]);
-  p.cone(0xffa21f, [0, 0.8, -0.62], 0.12, 0.42, [-0.6, 0, 0]);
-  p.cone(0xffe14a, [0, 0.77, -0.58], 0.07, 0.28, [-0.6, 0, 0]);
-}
-
-function splashfin(p: Parts, c: Critter): void {
-  const white = 0xe8f6ff;
-  const dark = 0x2b86d8;
-  p.ball(c.colour, [0, 0.48, -0.05], [0.5, 0.48, 0.62]);
-  p.ball(white, [0, 0.42, 0.12], [0.4, 0.38, 0.48]);
-  p.ball(c.colour, [0, 1.0, 0.25], 0.4);
-  p.ball(white, [0, 0.89, 0.58], [0.22, 0.14, 0.15]);
-  p.ball(OUTLINE_COLOUR, [0, 0.96, 0.72], 0.05);
-  p.eye([-0.16, 1.08, 0.56], 0.09);
-  p.eye([0.16, 1.08, 0.56], 0.09);
-  for (const s of [-1, 1]) {
-    p.ball(dark, [s * 0.5, 0.33, 0.15], [0.32, 0.06, 0.16], [0, 0, s * 0.5]);
-    p.ball(dark, [s * 0.15, 0.12, -0.7], [0.22, 0.05, 0.14], [0, s * 0.5, 0]);
-  }
-  // A curl of water on top of its head.
-  p.add(
-    new THREE.TorusGeometry(0.12, 0.045, 8, 16, Math.PI * 1.5),
-    0x9ad8ff,
-    [0, 1.48, 0.2],
-  );
-  p.ball(0x9ad8ff, [0.12, 1.48, 0.2], 0.05);
-}
-
-function thornbun(p: Parts, c: Critter): void {
-  const cream = 0xf2ffe0;
-  const dark = 0x3f9a44;
-  p.ball(c.colour, [0, 0.46, 0], [0.4, 0.42, 0.42]);
-  p.ball(cream, [0, 0.42, 0.14], [0.3, 0.32, 0.3]);
-  for (const s of [-1, 1]) {
-    p.ball(dark, [s * 0.18, 0.06, 0.15], [0.14, 0.08, 0.24]);
-    // Leaf ears: long, flat, and leaning out.
-    p.ball(dark, [s * 0.17, 1.55, 0.05], [0.12, 0.42, 0.05], [0, 0, -s * 0.25]);
-    p.ball(
-      0x8fe07f,
-      [s * 0.168, 1.53, 0.08],
-      [0.05, 0.32, 0.02],
-      [0, 0, -s * 0.25],
-    );
-  }
-  p.ball(c.colour, [0, 0.98, 0.12], 0.36);
-  p.eye([-0.14, 1.04, 0.42], 0.085);
-  p.eye([0.14, 1.04, 0.42], 0.085);
-  p.ball(0xff8fb0, [0, 0.95, 0.47], 0.04);
-  p.smile([0, 0.89, 0.45], 0.045);
-  // A flower on top, its petals round a yellow middle.
+  // A mane of flame running down the back.
   for (let i = 0; i < 5; i++) {
-    const a = (i / 5) * Math.PI * 2;
-    p.ball(
-      0xff7fb8,
-      [Math.cos(a) * 0.1, 1.33, 0.24 + Math.sin(a) * 0.1],
-      [0.08, 0.04, 0.08],
+    const z = 0.45 - i * 0.24;
+    const y = 1.18 - i * 0.03;
+    p.cone(
+      i % 2 ? yellow : flame,
+      [0, y, z],
+      0.13 - i * 0.01,
+      0.42,
+      [-0.6, 0, 0],
     );
   }
-  p.ball(0xffd84a, [0, 1.36, 0.24], 0.065);
-  p.ball(0xffffff, [0, 0.45, -0.42], 0.12);
+  p.cone(0xff3a12, [0, 0.98, -0.85], 0.19, 0.7, [-1.0, 0, 0]);
+  p.cone(flame, [0, 0.96, -0.8], 0.13, 0.55, [-1.0, 0, 0]);
+  p.cone(yellow, [0, 0.94, -0.76], 0.07, 0.34, [-1.0, 0, 0]);
 }
 
-function sparkbug(p: Parts, c: Critter): void {
-  const navy = 0x3a3350;
+/** A shark that walks: rows of teeth, a dorsal fin, red eyes. */
+function tidejaw(p: Parts, c: Critter): void {
+  const belly = 0xdfe9f0;
+  const fin = 0x1d4680;
+  p.ball(c.colour, [0, 0.76, -0.05], [0.46, 0.45, 0.85]);
+  p.ball(belly, [0, 0.62, 0.1], [0.37, 0.32, 0.7]);
+  p.ball(c.colour, [0, 0.86, 0.68], [0.39, 0.34, 0.42]);
+  p.ball(c.colour, [0, 0.92, 1.0], [0.27, 0.2, 0.26]);
+  // A wide mouth, open, with a row of teeth top and bottom.
+  p.ball(MOUTH, [0, 0.72, 0.9], [0.29, 0.1, 0.23]);
+  p.ball(belly, [0, 0.62, 0.82], [0.31, 0.1, 0.26]);
+  for (let k = -3; k <= 3; k++) {
+    p.fang([k * 0.075, 0.78, 1.0 - Math.abs(k) * 0.045], 0.028, 0.1);
+  }
+  for (let k = -2; k <= 2; k++) {
+    p.fang(
+      [k * 0.08 + 0.04, 0.67, 0.97 - Math.abs(k) * 0.045],
+      0.024,
+      0.08,
+      true,
+    );
+  }
   for (const s of [-1, 1]) {
-    for (const z of [-0.22, 0.02, 0.26]) {
-      p.rod(navy, [s * 0.36, 0.13, z], 0.025, 0.36, [0, 0, s * 0.9]);
+    p.eye([s * 0.25, 1.0, 0.84], 0.065, 0xff3b3b, fin, s);
+    for (let k = 0; k < 3; k++) {
+      p.add(new THREE.BoxGeometry(0.02, 0.2, 0.035), fin, [
+        s * 0.43,
+        0.83,
+        0.46 - k * 0.09,
+      ]);
+    }
+    p.ball(fin, [s * 0.52, 0.7, 0.32], [0.34, 0.05, 0.17], [0, 0, s * 0.6]);
+    for (const z of [0.45, -0.45]) {
+      p.rod(c.colour, [s * 0.3, 0.26, z], 0.11, 0.5);
+      p.ball(fin, [s * 0.3, 0.05, z + 0.04], [0.16, 0.07, 0.2]);
+      p.claws([s * 0.3, 0.05, z + 0.22], 0.06);
     }
   }
-  p.ball(c.colour, [0, 0.5, -0.05], [0.5, 0.42, 0.6]);
-  // Spots on the shell, each a ball sunk most of the way into it.
-  const spots: Array<V3> = [
-    [0.55, 0.6, 0.2],
-    [-0.55, 0.6, 0.2],
-    [0.35, 0.75, -0.55],
-    [-0.35, 0.75, -0.55],
-    [0, 0.9, -0.4],
-  ];
-  for (const [nx, ny, nz] of spots) {
-    const l = Math.hypot(nx, ny, nz);
-    p.ball(
-      navy,
-      [(0.5 * nx) / l, 0.5 + (0.42 * ny) / l, -0.05 + (0.6 * nz) / l],
-      0.1,
-    );
-  }
-  p.ball(navy, [0, 0.62, 0.5], 0.32);
-  p.eye([-0.13, 0.7, 0.75], 0.1);
-  p.eye([0.13, 0.7, 0.75], 0.1);
   p.add(
-    new THREE.TorusGeometry(0.05, 0.012, 6, 12, Math.PI),
-    c.colour,
-    [0, 0.55, 0.8],
-    [1, 1, 1],
-    [0, 0, Math.PI],
+    new THREE.ConeGeometry(0.26, 0.65, 12),
+    fin,
+    [0, 1.38, -0.05],
+    [0.3, 1, 1],
+    [-0.45, 0, 0],
   );
+  p.add(
+    new THREE.ConeGeometry(0.22, 0.65, 12),
+    fin,
+    [0, 1.02, -1.02],
+    [0.3, 1, 1],
+    [-0.9, 0, 0],
+  );
+  p.add(
+    new THREE.ConeGeometry(0.16, 0.45, 12),
+    fin,
+    [0, 0.58, -0.98],
+    [0.3, 1, 1],
+    [-2.3, 0, 0],
+  );
+}
+
+/** A great green beast on two legs, covered in thorns, with big claws. */
+function thornclaw(p: Parts, c: Critter): void {
+  const dark = 0x1b4d22;
+  const thorn = 0xd8b67a;
+  const leaf = 0x7ed957;
   for (const s of [-1, 1]) {
-    p.rod(navy, [s * 0.15, 1.0, 0.56], 0.022, 0.45, [0, 0, -s * 0.35]);
-    p.ball(0xfff27a, [s * 0.23, 1.22, 0.56], 0.07);
+    p.rod(dark, [s * 0.25, 0.26, 0], 0.15, 0.52);
+    p.ball(dark, [s * 0.25, 0.07, 0.08], [0.18, 0.09, 0.25]);
+    p.claws([s * 0.25, 0.06, 0.3], 0.08);
+  }
+  p.ball(c.colour, [0, 0.96, 0], [0.52, 0.56, 0.43]);
+  p.ball(0x5e9c48, [0, 0.88, 0.2], [0.37, 0.42, 0.3]);
+  for (const s of [-1, 1]) {
+    p.rod(dark, [s * 0.56, 0.86, 0.12], 0.13, 0.56, [0.2, 0, s * 0.35]);
+    p.ball(dark, [s * 0.66, 0.58, 0.22], 0.16);
+    p.claws([s * 0.66, 0.48, 0.34], 0.08, 0.5);
+    // Thorns on the shoulders, sticking up and out.
+    p.cone(thorn, [s * 0.44, 1.32, -0.05], 0.08, 0.36, [-0.3, 0, -s * 0.8]);
+    p.cone(thorn, [s * 0.5, 1.12, -0.12], 0.06, 0.28, [-0.3, 0, -s * 1.1]);
+  }
+  p.ball(c.colour, [0, 1.56, 0.15], [0.33, 0.29, 0.31]);
+  p.ball(c.colour, [0, 1.49, 0.41], [0.19, 0.13, 0.16]);
+  p.ball(dark, [0, 1.53, 0.56], 0.045);
+  p.ball(MOUTH, [0, 1.41, 0.4], [0.15, 0.06, 0.13]);
+  p.ball(dark, [0, 1.37, 0.37], [0.15, 0.05, 0.13]);
+  for (const s of [-1, 1]) {
+    p.fang([s * 0.08, 1.42, 0.5], 0.03, 0.1);
+    p.eye([s * 0.13, 1.61, 0.4], 0.06, 0xff6a1f, dark, s);
+    p.ball(leaf, [s * 0.11, 1.88, 0.03], [0.06, 0.24, 0.03], [0, 0, -s * 0.4]);
+  }
+  // A row of thorns down the spine.
+  const spine: Array<V3> = [
+    [0, 1.8, -0.02],
+    [0, 1.52, -0.3],
+    [0, 1.22, -0.43],
+    [0, 0.92, -0.43],
+    [0, 0.62, -0.34],
+  ];
+  for (const at of spine) {
+    p.cone(thorn, at, 0.08, 0.36, [-1.1, 0, 0]);
   }
 }
 
-function pebblet(p: Parts, c: Critter): void {
-  const dark = 0x857a6c;
-  // A faceted ball reads as a rock; its flat normals are what does it.
-  p.add(
-    new THREE.IcosahedronGeometry(0.55, 1),
-    c.colour,
-    [0, 0.5, 0],
-    [1, 0.85, 1],
-  );
-  p.ball(0x6bab4a, [0, 0.9, -0.02], [0.38, 0.13, 0.36]);
-  p.cone(0x6bab4a, [0.05, 1.06, 0], 0.04, 0.18, [0, 0, -0.3]);
-  p.ball(0x8fd06a, [0.1, 1.14, 0], [0.07, 0.03, 0.05]);
+/** A scorpion that crackles: pincers, six legs, and a lightning stinger. */
+function voltsting(p: Parts, c: Critter): void {
+  const dark = 0x2a2438;
+  const glow = 0x8ff7ff;
   for (const s of [-1, 1]) {
-    p.eye([s * 0.17, 0.64, 0.46], 0.09);
-    // Heavy lids, half down: it is a sleepy rock.
-    p.ball(c.colour, [s * 0.17, 0.685, 0.465], [0.1, 0.055, 0.1]);
-    p.ball(dark, [s * 0.57, 0.4, 0.1], [0.14, 0.18, 0.14]);
-    p.ball(dark, [s * 0.24, 0.06, 0.1], [0.18, 0.1, 0.22]);
+    for (const z of [-0.25, 0, 0.25]) {
+      p.rod(dark, [s * 0.44, 0.2, z], 0.035, 0.56, [0, 0, s * 1.0]);
+    }
   }
-  p.smile([0, 0.5, 0.52], 0.05);
+  p.ball(c.colour, [0, 0.5, 0], [0.43, 0.3, 0.56]);
+  for (const z of [-0.32, 0, 0.3]) {
+    p.ball(dark, [0, 0.55, z], [0.41, 0.26, 0.07]);
+  }
+  p.ball(dark, [0, 0.5, 0.55], [0.27, 0.2, 0.22]);
+  for (const s of [-1, 1]) {
+    p.eye([s * 0.1, 0.6, 0.73], 0.055, glow, c.colour, s);
+    p.ball(glow, [s * 0.19, 0.55, 0.68], 0.03);
+    p.cone(FANG, [s * 0.07, 0.4, 0.76], 0.03, 0.12, [Math.PI * 0.6, 0, 0]);
+    // An arm out front, ending in a pincer with two sharp fingers.
+    p.rod(dark, [s * 0.38, 0.52, 0.62], 0.05, 0.42, [Math.PI / 2, 0, -s * 0.3]);
+    p.ball(c.colour, [s * 0.46, 0.55, 0.92], [0.14, 0.11, 0.19]);
+    p.cone(c.colour, [s * 0.39, 0.58, 1.12], 0.05, 0.26, [
+      Math.PI / 2,
+      0,
+      s * 0.35,
+    ]);
+    p.cone(c.colour, [s * 0.53, 0.58, 1.12], 0.05, 0.26, [
+      Math.PI / 2,
+      0,
+      -s * 0.35,
+    ]);
+  }
+  // The tail, curling up and over, segment by segment.
+  const tail: Array<[number, number, number, number]> = [
+    [0.58, -0.6, 0.16, 0],
+    [0.82, -0.84, 0.15, 1],
+    [1.12, -0.9, 0.14, 0],
+    [1.4, -0.76, 0.13, 1],
+    [1.56, -0.5, 0.12, 0],
+    [1.56, -0.22, 0.11, 1],
+  ];
+  for (const [y, z, r, stripe] of tail) {
+    p.ball(stripe ? dark : c.colour, [0, y, z], r);
+  }
+  p.cone(glow, [0, 1.42, -0.04], 0.08, 0.32, [Math.PI * 0.8, 0, 0]);
+}
+
+/** A golem of rock with lava in its cracks and crystals on its back. */
+function rockjaw(p: Parts, c: Critter): void {
+  const dark = 0x4a443e;
+  const lava = 0xff6a1f;
+  const crystal = 0xb06bff;
+  for (const s of [-1, 1]) {
+    p.lump(dark, [s * 0.26, 0.2, 0], [0.22, 0.24, 0.24]);
+  }
   p.add(
-    new THREE.OctahedronGeometry(0.18),
-    0x5fe0ff,
-    [0, 0.82, -0.42],
-    [0.8, 1.4, 0.8],
-    [-0.5, 0, 0],
+    new THREE.IcosahedronGeometry(0.6, 1),
+    c.colour,
+    [0, 0.86, 0],
+    [1.05, 0.9, 0.85],
+  );
+  // Lava glowing through cracks in the chest.
+  p.add(
+    new THREE.BoxGeometry(0.05, 0.36, 0.04),
+    lava,
+    [0.1, 0.86, 0.5],
+    [1, 1, 1],
+    [0, 0, 0.3],
+  );
+  p.add(
+    new THREE.BoxGeometry(0.05, 0.3, 0.04),
+    lava,
+    [-0.13, 0.74, 0.5],
+    [1, 1, 1],
+    [0, 0, -0.45],
+  );
+  p.add(
+    new THREE.BoxGeometry(0.05, 0.22, 0.04),
+    lava,
+    [0, 1.06, 0.48],
+    [1, 1, 1],
+    [0, 0, 1.2],
+  );
+  p.lump(c.colour, [0, 1.48, 0.15], [0.33, 0.27, 0.3]);
+  for (const s of [-1, 1]) {
+    p.ball(lava, [s * 0.11, 1.5, 0.4], [0.07, 0.035, 0.04]);
+  }
+  // One heavy brow across both eyes, and a jaw like a slab.
+  p.add(
+    new THREE.BoxGeometry(0.44, 0.09, 0.13),
+    dark,
+    [0, 1.57, 0.4],
+    [1, 1, 1],
+    [0.2, 0, 0],
+  );
+  p.add(new THREE.BoxGeometry(0.34, 0.1, 0.16), dark, [0, 1.31, 0.36]);
+  for (const s of [-1, 1]) {
+    p.fang([s * 0.1, 1.39, 0.42], 0.03, 0.09, true);
+    p.lump(dark, [s * 0.68, 1.12, 0], 0.22);
+    p.lump(c.colour, [s * 0.78, 0.76, 0.1], [0.2, 0.28, 0.2]);
+    p.lump(dark, [s * 0.8, 0.42, 0.18], 0.27);
+    p.add(
+      new THREE.OctahedronGeometry(0.16),
+      crystal,
+      [s * 0.52, 1.42, -0.15],
+      [0.6, 1.6, 0.6],
+      [0, 0, s * 0.5],
+    );
+  }
+  p.add(
+    new THREE.OctahedronGeometry(0.2),
+    crystal,
+    [0, 1.42, -0.42],
+    [0.6, 1.7, 0.6],
+    [-0.6, 0, 0],
+  );
+  p.add(
+    new THREE.OctahedronGeometry(0.12),
+    crystal,
+    [0.22, 1.18, -0.5],
+    [0.6, 1.6, 0.6],
+    [-0.8, 0, 0.3],
   );
 }
 
 const BUILDERS: Record<string, (p: Parts, c: Critter) => void> = {
-  emberpup,
-  splashfin,
-  thornbun,
-  sparkbug,
-  pebblet,
+  blazefang,
+  tidejaw,
+  thornclaw,
+  voltsting,
+  rockjaw,
 };
 
 let gradient: THREE.DataTexture | undefined;
@@ -275,7 +423,7 @@ let gradient: THREE.DataTexture | undefined;
 function toonGradient(): THREE.DataTexture {
   if (!gradient) {
     gradient = new THREE.DataTexture(
-      new Uint8Array([110, 190, 255]),
+      new Uint8Array([80, 165, 255]),
       3,
       1,
       THREE.RedFormat,

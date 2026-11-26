@@ -125,12 +125,13 @@ export class Sounds {
         this.noise(0.3, 0.3, 1400);
         break;
       case "hit":
-        this.tone(180, 0.15, "square", 0.2, 70);
-        this.noise(0.12, 0.35, 2200);
+        this.tone(150, 0.2, "square", 0.25, 50);
+        this.noise(0.18, 0.45, 2000);
         break;
       case "superHit":
-        this.tone(140, 0.4, "sawtooth", 0.25, 40);
-        this.noise(0.4, 0.5, 1800);
+        this.tone(120, 0.6, "sawtooth", 0.3, 30);
+        this.tone(60, 0.7, "square", 0.2, 25);
+        this.noise(0.6, 0.6, 1600);
         break;
       case "fire":
         this.noise(0.45, 0.35, 900);
@@ -173,10 +174,15 @@ export class Sounds {
     }
   }
 
-  /** Each critter's own little call: a chirp from its pitch, swooping. */
+  /**
+   * Each beast's roar: a growl that rises and falls, with a rasp of noise
+   * under it. Its pitch and how far it drops come from the critter.
+   */
   cry(critter: Critter): void {
     const {pitch, swoop} = critter.cry;
-    this.tone(pitch, 0.14, "triangle", 0.3, pitch * swoop);
-    this.tone(pitch * swoop, 0.2, "triangle", 0.25, pitch * 1.2, 0.13);
+    this.tone(pitch, 0.12, "sawtooth", 0.22, pitch * 1.5);
+    this.tone(pitch * 1.5, 0.55, "sawtooth", 0.25, pitch * swoop, 0.1);
+    this.tone(pitch * 0.5, 0.6, "square", 0.12, pitch * swoop * 0.5, 0.05);
+    this.noise(0.6, 0.3, 900, 0.05);
   }
 }

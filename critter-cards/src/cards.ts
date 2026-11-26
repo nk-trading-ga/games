@@ -37,8 +37,10 @@ function renderPortraits(): Map<string, HTMLCanvasElement> {
   scene.add(sun);
   // Three-quarters on, the way a critter is drawn on a card.
   const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 20);
-  camera.position.set(1.25, 1.35, 2.9);
-  camera.lookAt(0, 0.72, 0);
+  // Back far enough for the tallest of them — the scorpion's tail, the
+  // thorn beast's crest — to stay inside the picture.
+  camera.position.set(1.9, 2.0, 4.4);
+  camera.lookAt(0, 1.0, 0.1);
 
   for (const critter of CRITTERS) {
     const model = buildCritter(critter);
@@ -139,8 +141,8 @@ function drawFace(critter: Critter, portrait: HTMLCanvasElement) {
     wy + wh * 0.55,
     ww * 0.7,
   );
-  glow.addColorStop(0, "#ffffff");
-  glow.addColorStop(1, css(critter.light));
+  glow.addColorStop(0, css(critter.light));
+  glow.addColorStop(1, "#2a2030");
   g.fillStyle = glow;
   roundRect(g, wx, wy, ww, wh, 12);
   g.fill();
@@ -161,7 +163,7 @@ function drawFace(critter: Critter, portrait: HTMLCanvasElement) {
   g.fill();
   g.fillStyle = "#3b3346";
   g.font = `bold 17px ${FONT}`;
-  g.fillText(`${KIND_NAME[critter.kind]} critter`, wx + 12, 293);
+  g.fillText(`${KIND_NAME[critter.kind]} beast`, wx + 12, 293);
   g.font = `15px ${FONT}`;
   wrap(g, critter.blurb, ww - 24).forEach((line, i) => {
     g.fillText(line, wx + 12, 314 + i * 18);
@@ -187,8 +189,8 @@ function drawBack(): HTMLCanvasElement {
   roundRect(g, 0, 0, W, H, 22);
   g.fill();
   const bg = g.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0, "#6b4cff");
-  bg.addColorStop(1, "#2d7bff");
+  bg.addColorStop(0, "#3a1020");
+  bg.addColorStop(1, "#7a1a1a");
   g.fillStyle = bg;
   roundRect(g, 10, 10, W - 20, H - 20, 16);
   g.fill();
@@ -200,7 +202,7 @@ function drawBack(): HTMLCanvasElement {
     g.arc(W / 2, H / 2, r, 0, Math.PI * 2);
     g.stroke();
   }
-  g.fillStyle = "#ffd84a";
+  g.fillStyle = "#ff8a1f";
   g.beginPath();
   for (let i = 0; i < 10; i++) {
     const a = -Math.PI / 2 + (i / 10) * Math.PI * 2;

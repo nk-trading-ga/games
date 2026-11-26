@@ -93,9 +93,9 @@ export const MOTION = {
   tackleOut: 0.28,
   tackleBack: 0.35,
   /** How far a critter is knocked back by a hit. */
-  knockback: 0.35,
+  knockback: 0.55,
   /** Idle breathing: how much it squashes and how fast. */
-  breathe: 0.035,
+  breathe: 0.025,
   breatheRate: 2.4,
 };
 

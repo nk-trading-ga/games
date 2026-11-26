@@ -75,7 +75,7 @@ export class UI {
 
     // ---- pick screen
     this.pick = el("div", "pick hidden", this.root);
-    el("h1", "pick-title", this.pick, "Pick your critter!");
+    el("h1", "pick-title", this.pick, "Pick your beast!");
     this.pickCards = el("div", "pick-cards", this.pick);
     this.pickGo = el("button", "big-button pick-go hidden", this.pick);
     this.pickNote = el("div", "pick-note", this.pick);
@@ -157,7 +157,7 @@ export class UI {
         img.alt = critter.name;
         img.draggable = false;
         if (critter.id === savedId) {
-          el("div", "pick-badge", b, "Your critter");
+          el("div", "pick-badge", b, "Your beast");
         }
         b.addEventListener("click", () => {
           this.sounds.unlock();
@@ -199,7 +199,7 @@ export class UI {
     };
     fill("player", player, "You");
     fill("foe", foe, trainer);
-    this.round.textContent = `Battle ${round + 1} of ${rounds}`;
+    this.round.textContent = `Fight ${round + 1} of ${rounds}`;
     this.moves.classList.add("hidden");
   }
 

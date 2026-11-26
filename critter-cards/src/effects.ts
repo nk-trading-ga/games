@@ -37,10 +37,10 @@ interface Volley {
 
 const FIRE = [0xff4a1c, 0xff9a1f, 0xffe14a];
 const WATER = [0x7fd0ff, 0xbfe9ff, 0xffffff];
-const LEAF = [0x4fb35f, 0x8fe07f, 0x2f8a3f];
-const PETAL = [0xff7fb8, 0xffb3d6, 0xffd84a];
+const LEAF = [0x2f7d32, 0x7ed957, 0x1b4d22];
+const THORN = [0xd8b67a, 0x8a6a3a, 0xfff0c0];
 const SPARK = [0xfff27a, 0xffffff, 0xffcc1f];
-const DUST = [0xb8a68c, 0x9a8f80, 0xe2dbcf];
+const DUST = [0x8c857a, 0x6d665e, 0xff6a1f];
 
 const up = new THREE.Vector3(0, 1, 0);
 
@@ -49,15 +49,29 @@ const up = new THREE.Vector3(0, 1, 0);
 const sphere = new THREE.SphereGeometry(1, 16, 12);
 const fireCore = new THREE.MeshBasicMaterial({color: 0xfff1a0});
 const fireShell = new THREE.MeshBasicMaterial({
-  color: 0xff6a1f,
+  color: 0xe8320c,
   transparent: true,
   opacity: 0.75,
 });
-const bubbleMat = new THREE.MeshBasicMaterial({
-  color: 0x7fd0ff,
+const waterMat = new THREE.MeshBasicMaterial({
+  color: 0x3a8cff,
   transparent: true,
-  opacity: 0.55,
+  opacity: 0.8,
   depthWrite: false,
+});
+const ringGeo = new THREE.RingGeometry(0.8, 1, 40);
+const slashGeo = new THREE.PlaneGeometry(0.05, 0.9);
+const slashCore = new THREE.MeshBasicMaterial({
+  color: 0xffffff,
+  side: THREE.DoubleSide,
+  depthTest: false,
+});
+const slashGlow = new THREE.MeshBasicMaterial({
+  color: 0xff2a2a,
+  side: THREE.DoubleSide,
+  transparent: true,
+  opacity: 0.8,
+  depthTest: false,
 });
 const shineMat = new THREE.MeshBasicMaterial({color: 0xffffff});
 const boltMat = new THREE.MeshBasicMaterial({color: 0xfff27a});
@@ -81,7 +95,11 @@ function painted(geo: THREE.BufferGeometry, colour: number) {
 }
 
 const leafGeo = painted(new THREE.SphereGeometry(1, 10, 6), 0x4fb35f);
-const petalGeo = painted(new THREE.SphereGeometry(1, 10, 6), 0xff8fc4);
+// A thorn, its point turned to face +Z so lookAt aims it like an arrow.
+const thornGeo = painted(
+  new THREE.ConeGeometry(0.05, 0.32, 8).rotateX(Math.PI / 2),
+  0xd8b67a,
+);
 const rockGeo = [0x9a8f80, 0x857a6c, 0xb0a593].map(c =>
   painted(new THREE.IcosahedronGeometry(1, 0), c),
 );
@@ -183,16 +201,81 @@ export class Effects {
     v.land(piece.position.clone(), i);
   }
 
-  private shakeIfBig(shot: Shot): void {
+  /** Every hit shakes the screen a little, and a super move a lot. */
+  private shakeOnHit(shot: Shot): void {
     if (shot.big) {
       this.stage.shake();
+    } else {
+      this.stage.shake(EFFECTS.shake * 0.45, EFFECTS.shakeTime * 0.6);
     }
+  }
+
+  /** A ring blasting outward along the ground from where a hit lands. */
+  shockwave(at: THREE.Vector3, colour: number, size = 1): void {
+    const ring = new THREE.Mesh(
+      ringGeo,
+      new THREE.MeshBasicMaterial({
+        color: colour,
+        transparent: true,
+        depthWrite: false,
+      }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(at.x, 0.08, at.z);
+    this.stage.scene.add(ring);
+    void this.clock
+      .tween(
+        0.45,
+        t => {
+          ring.scale.setScalar(0.3 + t * 2.2 * size);
+          (ring.material as THREE.MeshBasicMaterial).opacity = 1 - t;
+        },
+        Ease.out,
+      )
+      .then(() => {
+        this.stage.scene.remove(ring);
+        (ring.material as THREE.Material).dispose();
+      });
+  }
+
+  /** Three claw marks ripped across the target, flashing and gone. */
+  slash(at: THREE.Vector3): Promise<void> {
+    const group = new THREE.Group();
+    group.position.copy(at);
+    group.lookAt(this.stage.camera.position);
+    const marks: Array<THREE.Group> = [];
+    for (let k = -1; k <= 1; k++) {
+      const mark = new THREE.Group();
+      const glow = new THREE.Mesh(slashGeo, slashGlow);
+      glow.scale.set(2.6, 1.05, 1);
+      mark.add(glow, new THREE.Mesh(slashGeo, slashCore));
+      mark.position.set(k * 0.2, k * 0.05, 0.6);
+      mark.rotation.z = 0.7;
+      group.add(mark);
+      marks.push(mark);
+    }
+    this.stage.scene.add(group);
+    return this.clock
+      .tween(
+        0.4,
+        t => {
+          const grow = Math.min(1, t * 4);
+          const fade = t < 0.5 ? 1 : 1 - (t - 0.5) * 2;
+          for (const mark of marks) {
+            mark.scale.set(fade, grow, 1);
+          }
+        },
+        Ease.linear,
+      )
+      .then(() => {
+        this.stage.scene.remove(group);
+      });
   }
 
   private fireball(shot: Shot): Promise<void> {
     const big = shot.big;
     const s = big ? EFFECTS.superScale : 1;
-    const count = big ? 5 : 1;
+    const count = big ? 7 : 2;
     // A super move's fireballs land around the target, not all on one spot.
     const ends = Array.from({length: count}, (_, i) =>
       i === 0
@@ -210,7 +293,7 @@ export class Effects {
         const shell = new THREE.Mesh(sphere, fireShell);
         shell.scale.setScalar(1.4);
         g.add(shell);
-        g.scale.setScalar(0.22 * s);
+        g.scale.setScalar(0.32 * s);
         return g;
       },
       path: (t, i, out) => {
@@ -232,7 +315,7 @@ export class Effects {
       land: (at, i) => {
         this.stage.sparks.burst(at, {
           color: FIRE,
-          count: big ? 40 : 30,
+          count: big ? 60 : 45,
           speed: 3.2 * s,
           lift: 1.5,
           gravity: 2,
@@ -241,110 +324,127 @@ export class Effects {
           spherical: 0.8,
         });
         this.sounds.play(big ? "superHit" : "hit");
-        this.shakeIfBig(shot);
+        this.shockwave(at, 0xff6a1f, s);
+        this.shakeOnHit(shot);
         shot.onImpact(i);
       },
     });
   }
 
+  /** A blast of water: fat jets streaking in, bursting into spray. */
   private bubbles(shot: Shot): Promise<void> {
     const big = shot.big;
     const s = big ? EFFECTS.superScale : 1;
-    const count = big ? 16 : 6;
+    const count = big ? 24 : 10;
     const side = new THREE.Vector3()
       .subVectors(shot.to, shot.from)
       .cross(up)
       .normalize();
     const phase = Array.from({length: count}, () => Math.random() * 6.3);
     this.sounds.play("bubble");
+    this.sounds.play("whoosh");
     return this.volley({
       count,
-      flight: EFFECTS.flight * 1.1,
-      stagger: EFFECTS.stagger * (big ? 0.6 : 1),
+      flight: EFFECTS.flight * 0.8,
+      stagger: EFFECTS.stagger * (big ? 0.4 : 0.6),
       make: () => {
         const g = new THREE.Group();
-        g.add(new THREE.Mesh(sphere, bubbleMat));
-        const shine = new THREE.Mesh(sphere, shineMat);
-        shine.scale.setScalar(0.22);
-        shine.position.set(0.4, 0.45, 0.5);
-        g.add(shine);
-        g.scale.setScalar((0.13 + Math.random() * 0.09) * s);
+        g.add(new THREE.Mesh(sphere, waterMat));
+        const core = new THREE.Mesh(sphere, shineMat);
+        core.scale.setScalar(0.45);
+        g.add(core);
+        // Stretched along its flight: a jet, not a bubble.
+        const r = (0.12 + Math.random() * 0.06) * s;
+        g.scale.set(r, r, r * 3);
         return g;
       },
       path: (t, i, out) => {
         out.lerpVectors(shot.from, shot.to, t);
-        const wob = Math.sin(t * 9 + phase[i]) * 0.25 * (1 - t);
+        const wob = Math.sin(t * 6 + phase[i]) * 0.12 * (1 - t) * s;
         out.addScaledVector(side, wob);
-        out.y += Math.sin(t * 7 + phase[i]) * 0.15 + (big ? t * 0.4 : 0);
+        out.y += Math.sin(Math.PI * t) * (big ? 0.5 : 0.15);
+      },
+      frame: piece => {
+        piece.lookAt(shot.to);
       },
       land: (at, i) => {
         this.stage.sparks.burst(at, {
           color: WATER,
-          count: 10,
-          speed: 1.8 * s,
-          lift: 2.2,
+          count: 16,
+          speed: 2.6 * s,
+          lift: 2.4,
           gravity: 6,
-          ttl: 0.5,
-          size: s,
-          spherical: 0.5,
+          ttl: 0.6,
+          size: 1.2 * s,
+          spherical: 0.6,
         });
         if (i % 3 === 0) {
-          this.sounds.play("tap");
+          this.sounds.play("hit");
         }
         if (i === count - 1) {
           this.sounds.play(big ? "superHit" : "hit");
-          this.shakeIfBig(shot);
+          this.shockwave(at, 0x7fd0ff, s);
         }
+        this.shakeOnHit(shot);
         shot.onImpact(i);
       },
     });
   }
 
+  /** A storm of thorns shot like arrows, with leaves torn up behind. */
   private leaves(shot: Shot): Promise<void> {
     const big = shot.big;
     const s = big ? EFFECTS.superScale : 1;
-    const count = big ? 22 : 8;
+    const count = big ? 26 : 10;
     const dir = new THREE.Vector3().subVectors(shot.to, shot.from).normalize();
     const side = new THREE.Vector3().crossVectors(dir, up).normalize();
     const lift = new THREE.Vector3().crossVectors(side, dir).normalize();
     this.sounds.play("leaf");
+    this.sounds.play("whoosh");
     return this.volley({
       count,
-      flight: EFFECTS.flight * 1.3,
-      stagger: EFFECTS.stagger * (big ? 0.5 : 0.8),
+      flight: EFFECTS.flight * 0.9,
+      stagger: EFFECTS.stagger * (big ? 0.35 : 0.6),
       make: i => {
-        const petal = big && i % 2 === 1;
-        const m = new THREE.Mesh(petal ? petalGeo : leafGeo, toon);
-        m.scale.set(0.17 * s, 0.035 * s, 0.09 * s);
-        m.rotation.set(Math.random() * 6, Math.random() * 6, 0);
+        const leaf = i % 3 === 2;
+        const m = new THREE.Mesh(leaf ? leafGeo : thornGeo, toon);
+        if (leaf) {
+          m.scale.set(0.15 * s, 0.03 * s, 0.08 * s);
+        } else {
+          m.scale.setScalar(s);
+        }
         return m;
       },
       path: (t, i, out) => {
-        // A corkscrew down the line between them, tightening as it lands.
-        const a = t * Math.PI * 4 + i * 1.3;
-        const r = 0.55 * (1 - t) * s;
+        // A spiral down the line between them, tightening onto the target.
+        const a = t * Math.PI * 3 + i * 1.3;
+        const r = 0.3 * (1 - t) * s;
         out.lerpVectors(shot.from, shot.to, t);
         out.addScaledVector(side, Math.cos(a) * r);
         out.addScaledVector(lift, Math.sin(a) * r);
       },
-      frame: (piece, _t, dt) => {
-        piece.rotation.x += dt * 9;
-        piece.rotation.z += dt * 6;
+      frame: piece => {
+        // Point first, like an arrow.
+        piece.lookAt(shot.to);
       },
       land: (at, i) => {
         this.stage.sparks.burst(at, {
-          color: big && i % 2 ? PETAL : LEAF,
-          count: 5,
-          speed: 1.5,
+          color: big && i % 2 ? THORN : LEAF,
+          count: 8,
+          speed: 2.2 * s,
           lift: 1.2,
           gravity: 3,
           ttl: 0.5,
           size: s,
         });
+        if (i % 4 === 0) {
+          this.sounds.play("hit");
+        }
         if (i === count - 1) {
           this.sounds.play(big ? "superHit" : "hit");
-          this.shakeIfBig(shot);
+          this.shockwave(at, 0x7ed957, s);
         }
+        this.shakeOnHit(shot);
         shot.onImpact(i);
       },
     });
@@ -353,7 +453,7 @@ export class Effects {
   /** Lightning out of the sky onto the target, crackling as it goes. */
   private async zap(shot: Shot): Promise<void> {
     const big = shot.big;
-    const count = big ? 4 : 1;
+    const count = big ? 5 : 1;
     // Sparks gather on the attacker first, so it is clear who did it.
     await this.clock.tween(
       0.4,
@@ -378,12 +478,13 @@ export class Effects {
             ? new THREE.Vector3()
             : new THREE.Vector3(spread(0.5), 0, spread(0.5)),
         );
-      const bolt = this.bolt(at, big ? 1.5 : 1);
+      const bolt = this.bolt(at, big ? 2.2 : 1.5);
+      this.shockwave(at, 0xfff27a, big ? 1.4 : 1);
       this.stage.scene.add(bolt);
       this.sounds.play("zap");
       this.stage.sparks.burst(at, {
         color: SPARK,
-        count: 36,
+        count: 50,
         speed: 3.5,
         lift: 1.2,
         gravity: 3,
@@ -392,7 +493,7 @@ export class Effects {
         spherical: 0.8,
       });
       this.sounds.play(big ? "superHit" : "hit");
-      this.shakeIfBig(shot);
+      this.shakeOnHit(shot);
       shot.onImpact(i);
       // A flicker or two, the way lightning does.
       await this.clock.tween(
@@ -463,7 +564,7 @@ export class Effects {
   private rocks(shot: Shot): Promise<void> {
     const big = shot.big;
     const s = big ? EFFECTS.superScale : 1;
-    const count = big ? 9 : 3;
+    const count = big ? 12 : 4;
     const starts = Array.from({length: count}, () =>
       shot.to
         .clone()
@@ -494,7 +595,7 @@ export class Effects {
       stagger: EFFECTS.stagger * 1.6,
       make: i => {
         const m = new THREE.Mesh(rockGeo[i % rockGeo.length], toon);
-        m.scale.setScalar((0.22 + Math.random() * 0.1) * s);
+        m.scale.setScalar((0.3 + Math.random() * 0.12) * s);
         return m;
       },
       path: (t, i, out) => {
@@ -510,8 +611,8 @@ export class Effects {
       land: (at, i) => {
         this.stage.sparks.burst(at, {
           color: DUST,
-          count: 22,
-          speed: 2.4 * s,
+          count: 34,
+          speed: 3 * s,
           lift: 1.4,
           gravity: 4,
           ttl: 0.6,
@@ -519,9 +620,8 @@ export class Effects {
           spherical: 0.4,
         });
         this.sounds.play("rock");
-        if (big) {
-          this.stage.shake(0.12, 0.3);
-        }
+        this.shockwave(at, 0x8c857a, s);
+        this.shakeOnHit(shot);
         shot.onImpact(i);
       },
     });

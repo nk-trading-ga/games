@@ -170,7 +170,7 @@ export class Battle {
   async run(): Promise<Outcome> {
     this.ui.setPuff("player", this.player.puff, this.player.maxPuff);
     this.ui.setPuff("foe", this.foe.puff, this.foe.maxPuff);
-    this.ui.say(`${this.trainer.name} wants to battle!`);
+    this.ui.say(`${this.trainer.name} wants to fight!`);
     await this.clock.wait(TIMING.announce * 1.4);
 
     this.ui.say(`${this.trainer.name} sends out ${this.foe.critter.name}!`);
@@ -299,14 +299,14 @@ export class Battle {
   /** Where moves come out of: a little in front of the face. */
   private mouth(f: Fighter): THREE.Vector3 {
     return new THREE.Vector3(
-      f.spot.x + Math.sin(f.yaw) * 0.5,
-      0.95,
-      f.spot.z + Math.cos(f.yaw) * 0.5,
+      f.spot.x + Math.sin(f.yaw) * 0.75,
+      1.1,
+      f.spot.z + Math.cos(f.yaw) * 0.75,
     );
   }
 
   private middle(f: Fighter): THREE.Vector3 {
-    return new THREE.Vector3(f.spot.x, 0.7, f.spot.z);
+    return new THREE.Vector3(f.spot.x, 0.85, f.spot.z);
   }
 
   private async use(attacker: Fighter, target: Fighter, move: Move) {
@@ -374,7 +374,10 @@ export class Battle {
       size: 1.2,
       spherical: 0.7,
     });
-    this.sounds.play("hit");
+    this.sounds.play("superHit");
+    void this.effects.slash(this.middle(target));
+    this.effects.shockwave(target.spot, 0xffffff);
+    this.stage.shake(0.1, 0.3);
     onImpact();
     await this.clock.tween(
       MOTION.tackleBack,
@@ -405,7 +408,7 @@ export class Battle {
     this.ui.setPuff(target.side, target.puff, target.maxPuff);
 
     const head = this.stage.toScreen(
-      new THREE.Vector3(target.spot.x, 1.6, target.spot.z),
+      new THREE.Vector3(target.spot.x, 2.1, target.spot.z),
     );
     this.ui.popup(`-${damage}`, head.x, head.y, "hit");
     if (superHit) {
@@ -436,8 +439,8 @@ export class Battle {
     this.sounds.play("faint");
     this.ui.say(
       f.side === "player"
-        ? `${f.critter.name} is all tired out!`
-        : `${this.name(f)} is all tired out!`,
+        ? `${f.critter.name} is knocked out!`
+        : `${this.name(f)} is knocked out!`,
     );
     await this.clock.wait(0.4);
     const from = f.root.position.clone();

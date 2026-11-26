@@ -44,10 +44,10 @@ export class Stage {
     const forward = this.target.clone().sub(this.home).setY(0).normalize();
     this.screenRight.crossVectors(forward, new THREE.Vector3(0, 1, 0));
 
-    this.scene.background = new THREE.Color(0x9fdcff);
-    this.scene.fog = new THREE.Fog(0x9fdcff, 30, 80);
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x6f9a5a, 1.5));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.7);
+    this.scene.background = new THREE.Color(0x6a6f9e);
+    this.scene.fog = new THREE.Fog(0x6a6f9e, 28, 75);
+    this.scene.add(new THREE.HemisphereLight(0xd8d0ff, 0x4a4038, 1.3));
+    const sun = new THREE.DirectionalLight(0xffc89a, 2.0);
     sun.position.set(-4, 10, 6);
     this.scene.add(sun);
 
@@ -61,18 +61,18 @@ export class Stage {
   private buildMeadow(): void {
     const ground = new THREE.Mesh(
       new THREE.CircleGeometry(90, 48),
-      new THREE.MeshLambertMaterial({color: 0x86c96e}),
+      new THREE.MeshLambertMaterial({color: 0x56704a}),
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.3;
     this.scene.add(ground);
 
-    // The battle platform: a low round lawn, a step up from the meadow, with a
-    // pale circle on it under each critter.
+    // The battle platform: a round stone floor, a step up from the meadow,
+    // with a darker circle on it under each beast.
     const p = new Parts();
     p.add(
       new THREE.CylinderGeometry(ARENA.radius, ARENA.radius + 0.2, 0.3, 48),
-      0x9ad97f,
+      0x8c857a,
       [0, -0.15, 0],
     );
     p.add(
@@ -82,12 +82,12 @@ export class Stage {
         0.12,
         48,
       ),
-      0xd9c08a,
+      0x4f4943,
       [0, -0.24, 0],
     );
     for (const spot of [ARENA.playerSpot, ARENA.foeSpot]) {
-      // Stood 0.01 proud of the lawn, which would otherwise z-fight it.
-      p.add(new THREE.CylinderGeometry(1.05, 1.05, 0.02, 40), 0xd6f5c4, [
+      // Stood 0.01 proud of the floor, which would otherwise z-fight it.
+      p.add(new THREE.CylinderGeometry(1.05, 1.05, 0.02, 40), 0x6d665e, [
         spot.x,
         0.01,
         spot.z,
@@ -96,14 +96,14 @@ export class Stage {
     // A line across the middle, the way a pitch has.
     p.add(
       new THREE.BoxGeometry(0.12, 0.02, 7),
-      0xd6f5c4,
+      0x6d665e,
       [0, 0.01, 0],
       [1, 1, 1],
       [0, Math.atan2(-ARENA.foeSpot.z, ARENA.foeSpot.x), 0],
     );
     this.scene.add(outlined(p.build()));
 
-    // Trees and bushes in a ring round it, and hills further off.
+    // Dark pines and boulders in a ring round it, and hills further off.
     const trees = new Parts();
     const rng = mulberry(7);
     for (let i = 0; i < 26; i++) {
@@ -118,12 +118,12 @@ export class Stage {
           0x8a5a3a,
           [x, 0.3 * s - 0.3, z],
         );
-        trees.add(new THREE.ConeGeometry(1.1 * s, 2.4 * s, 10), 0x3f9a52, [
+        trees.add(new THREE.ConeGeometry(1.1 * s, 2.4 * s, 10), 0x2a5a3c, [
           x,
           1.8 * s - 0.3,
           z,
         ]);
-        trees.add(new THREE.ConeGeometry(0.85 * s, 1.8 * s, 10), 0x4fb35f, [
+        trees.add(new THREE.ConeGeometry(0.85 * s, 1.8 * s, 10), 0x346b47, [
           x,
           2.7 * s - 0.3,
           z,
@@ -131,22 +131,22 @@ export class Stage {
       } else {
         trees.add(
           new THREE.SphereGeometry(0.9 * s, 12, 8),
-          0x5cbf5a,
+          0x6d665e,
           [x, 0.2, z],
           [1, 0.75, 1],
         );
-        trees.add(
-          new THREE.SphereGeometry(0.12, 8, 6),
-          [0xff7fb8, 0xffd84a, 0xffffff][i % 3],
-          [x + 0.4 * s, 0.75 * s, z + 0.3 * s],
-        );
+        trees.add(new THREE.SphereGeometry(0.12, 8, 6), 0x4f4943, [
+          x + 0.4 * s,
+          0.75 * s,
+          z + 0.3 * s,
+        ]);
       }
     }
     for (let i = 0; i < 9; i++) {
       const a = (i / 9) * Math.PI * 2 + 0.3;
       trees.add(
         new THREE.SphereGeometry(1, 16, 10),
-        i % 2 ? 0x77bf68 : 0x6aad5f,
+        i % 2 ? 0x4a5f52 : 0x3f5248,
         [Math.cos(a) * 45, -2, Math.sin(a) * 45],
         [14, 8 + (i % 3) * 3, 14],
       );
@@ -162,7 +162,7 @@ export class Stage {
       for (let j = 0; j < 4; j++) {
         clouds.add(
           new THREE.SphereGeometry(1, 12, 8),
-          0xffffff,
+          0xb8b4cc,
           [cx + (j - 1.5) * 2.2, cy + (j % 2) * 0.8, cz],
           [2.4, 1.6, 2],
         );
