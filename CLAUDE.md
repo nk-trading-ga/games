@@ -12,6 +12,13 @@ technical work (building, testing, git) quietly in the background.
 That is only for this repo. Their parent is the one in other conversations,
 and there you can be as technical as needed.
 
+## Where work goes
+
+**Work on `main` and push straight to it** — that is what puts a change on the
+website. No feature branches, no pull requests, no code review, and no need to
+ask a parent first. The one step that is never skipped is the whole-repo build
+below: run it, and fix what it finds, before every push.
+
 Static web games plus the generated gallery that publishes them. See
 [README.md](README.md) for what it all is. This file is how to work on it.
 
