@@ -14,8 +14,21 @@ export interface Move {
   icon: string;
 }
 
+/** What changes when a beast evolves: its name, its look, its card. */
+export interface Form {
+  name: string;
+  blurb: string;
+  colour: number;
+  light: number;
+}
+
 export interface Critter {
   id: string;
+  /**
+   * Which form it is in: 0 as it starts, 1 evolved, 2 Mega Evolved. Everything
+   * in CRITTERS is form 0; `atForm` gives the same beast in another form.
+   */
+  form: number;
   name: string;
   kind: Kind;
   /** One line for the card, in words a child can read. */
@@ -27,6 +40,8 @@ export interface Critter {
   /** The noise it makes: a pitch in Hz and how much it swoops. */
   cry: {pitch: number; swoop: number};
   moves: readonly [Move, Move, Move];
+  /** Its evolved form and its Mega form. */
+  evolutions: readonly [Form, Form];
 }
 
 export const KIND_ICON: Record<Kind, string> = {
@@ -62,6 +77,7 @@ export const STRONG_AGAINST: Record<Kind, ReadonlyArray<Kind>> = {
 export const CRITTERS: ReadonlyArray<Critter> = [
   {
     id: "blazefang",
+    form: 0,
     name: "Blazefang",
     kind: "fire",
     blurb: "A horned wolf with a burning mane. Its bite is red hot.",
@@ -73,9 +89,26 @@ export const CRITTERS: ReadonlyArray<Critter> = [
       {name: "Fire Blast", power: "special", effect: "fireball", icon: "🔥"},
       {name: "Inferno", power: "superMove", effect: "fireball", icon: "⭐"},
     ],
+    evolutions: [
+      {
+        name: "Infernofang",
+        blurb:
+          "Bigger, with more horns and a mane of fire down its whole back.",
+        colour: 0xc02810,
+        light: 0xffa060,
+      },
+      {
+        name: "Mega Infernofang",
+        blurb:
+          "Its fire burns blue. Wings of flame, armour, and horns like a dragon's.",
+        colour: 0x8a1408,
+        light: 0x9fdcff,
+      },
+    ],
   },
   {
     id: "tidejaw",
+    form: 0,
     name: "Tidejaw",
     kind: "water",
     blurb: "A shark that walks on land, with rows and rows of teeth.",
@@ -87,9 +120,25 @@ export const CRITTERS: ReadonlyArray<Critter> = [
       {name: "Water Cannon", power: "special", effect: "bubbles", icon: "💧"},
       {name: "Tsunami", power: "superMove", effect: "bubbles", icon: "⭐"},
     ],
+    evolutions: [
+      {
+        name: "Abyssjaw",
+        blurb: "A giant shark with bony armour and two rows of teeth.",
+        colour: 0x1f4a8a,
+        light: 0x86b8ff,
+      },
+      {
+        name: "Mega Abyssjaw",
+        blurb:
+          "From the darkest deep, with glowing stripes and a glowing lure.",
+        colour: 0x13284f,
+        light: 0x6ff0ff,
+      },
+    ],
   },
   {
     id: "thornclaw",
+    form: 0,
     name: "Thornclaw",
     kind: "leaf",
     blurb: "A giant of the jungle, covered in thorns as sharp as knives.",
@@ -101,9 +150,25 @@ export const CRITTERS: ReadonlyArray<Critter> = [
       {name: "Thorn Storm", power: "special", effect: "leaves", icon: "🌵"},
       {name: "Jungle Fury", power: "superMove", effect: "leaves", icon: "⭐"},
     ],
+    evolutions: [
+      {
+        name: "Thornking",
+        blurb: "Taller, with thorn horns and a coat of armour made of bark.",
+        colour: 0x2a6e2c,
+        light: 0x9ed884,
+      },
+      {
+        name: "Mega Thornking",
+        blurb:
+          "A crown of thorns, vines round its arms, and poison-green eyes.",
+        colour: 0x1d5a20,
+        light: 0xb8ff5a,
+      },
+    ],
   },
   {
     id: "voltsting",
+    form: 0,
     name: "Voltsting",
     kind: "spark",
     blurb: "A giant scorpion. Its tail is full of lightning.",
@@ -120,9 +185,24 @@ export const CRITTERS: ReadonlyArray<Critter> = [
         icon: "⭐",
       },
     ],
+    evolutions: [
+      {
+        name: "Stormstinger",
+        blurb: "Two stingers, spikes all over its shell, and bigger pincers.",
+        colour: 0xe0a800,
+        light: 0xffe68a,
+      },
+      {
+        name: "Mega Stormstinger",
+        blurb: "It can fly. Three lightning stingers and a crown of spikes.",
+        colour: 0xd99a00,
+        light: 0x8ff7ff,
+      },
+    ],
   },
   {
     id: "rockjaw",
+    form: 0,
     name: "Rockjaw",
     kind: "rock",
     blurb: "A rock giant with lava inside. It can smash a mountain.",
@@ -134,9 +214,35 @@ export const CRITTERS: ReadonlyArray<Critter> = [
       {name: "Boulder Drop", power: "special", effect: "rocks", icon: "🪨"},
       {name: "Earthquake", power: "superMove", effect: "rocks", icon: "⭐"},
     ],
+    evolutions: [
+      {
+        name: "Magmatitan",
+        blurb: "Lava pours through its cracks. Rock horns and boulder fists.",
+        colour: 0x5c554e,
+        light: 0xffb070,
+      },
+      {
+        name: "Mega Magmatitan",
+        blurb:
+          "Black as night, with a volcano on its back and lava everywhere.",
+        colour: 0x2a2630,
+        light: 0xff8a3a,
+      },
+    ],
   },
 ];
 
 export function critterById(id: string): Critter | undefined {
   return CRITTERS.find(c => c.id === id);
 }
+
+/** The same beast in another form: 0 as it starts, 1 evolved, 2 Mega. */
+export function atForm(critter: Critter, form: number): Critter {
+  const base = CRITTERS.find(c => c.id === critter.id) ?? critter;
+  if (form <= 0) {
+    return base;
+  }
+  return {...base, ...base.evolutions[Math.min(form, 2) - 1], form};
+}
+
+export const FORM_NAME = ["", "Evolved", "Mega"] as const;

@@ -1,6 +1,13 @@
 import * as THREE from "three";
-import {CARD} from "./config";
-import {CRITTERS, KIND_ICON, KIND_NAME, type Critter} from "./critters";
+import {CARD, FORM_SCALE} from "./config";
+import {
+  CRITTERS,
+  FORM_NAME,
+  KIND_ICON,
+  KIND_NAME,
+  atForm,
+  type Critter,
+} from "./critters";
 import {buildCritter} from "./models";
 
 // The cards: their art, drawn once on a canvas per critter and used twice —
@@ -42,15 +49,18 @@ function renderPortraits(): Map<string, HTMLCanvasElement> {
   camera.position.set(1.9, 2.0, 4.4);
   camera.lookAt(0, 1.0, 0.1);
 
-  for (const critter of CRITTERS) {
+  for (const critter of allForms()) {
     const model = buildCritter(critter);
+    // Shrunk back to the size of the first form, so a bigger form still fits
+    // its picture; the card's banner is what says it has grown.
+    model.group.scale.setScalar(1 / (FORM_SCALE[critter.form] ?? 1));
     scene.add(model.group);
     renderer.render(scene, camera);
     const canvas = document.createElement("canvas");
     canvas.width = PORTRAIT;
     canvas.height = PORTRAIT;
     canvas.getContext("2d")?.drawImage(renderer.domElement, 0, 0);
-    out.set(critter.id, canvas);
+    out.set(cardKey(critter), canvas);
     scene.remove(model.group);
     model.group.traverse(o => {
       if (o instanceof THREE.Mesh) {
@@ -62,6 +72,16 @@ function renderPortraits(): Map<string, HTMLCanvasElement> {
   renderer.dispose();
   renderer.forceContextLoss();
   return out;
+}
+
+/** Which card art goes with a beast in a form. */
+export function cardKey(critter: Critter): string {
+  return `${critter.id}:${critter.form}`;
+}
+
+/** Every beast in every one of its three forms. */
+function allForms(): Array<Critter> {
+  return CRITTERS.flatMap(c => [0, 1, 2].map(f => atForm(c, f)));
 }
 
 function roundRect(
@@ -103,8 +123,9 @@ function drawFace(critter: Critter, portrait: HTMLCanvasElement) {
   if (!g) {
     return canvas;
   }
-  // White edge, then a frame in the critter's own colour.
-  g.fillStyle = "#ffffff";
+  // White edge (gold for a Mega), then a frame in the beast's own colour.
+  const mega = critter.form === 2;
+  g.fillStyle = mega ? "#ffd23a" : "#ffffff";
   roundRect(g, 0, 0, W, H, 22);
   g.fill();
   g.fillStyle = css(critter.colour);
@@ -113,7 +134,13 @@ function drawFace(critter: Critter, portrait: HTMLCanvasElement) {
 
   // Name along the top, and its kind in a circle at the right.
   g.fillStyle = "#ffffff";
-  g.font = `bold 34px ${FONT}`;
+  // Long names (the Mega ones) shrink until they fit beside the kind badge.
+  let px = 34;
+  g.font = `bold ${px}px ${FONT}`;
+  while (g.measureText(critter.name).width > W - 100 && px > 18) {
+    px -= 1;
+    g.font = `bold ${px}px ${FONT}`;
+  }
   g.textBaseline = "middle";
   g.shadowColor = "rgba(0,0,0,0.35)";
   g.shadowOffsetY = 2;
@@ -152,10 +179,23 @@ function drawFace(critter: Critter, portrait: HTMLCanvasElement) {
   const size = wh * 1.08;
   g.drawImage(portrait, W / 2 - size / 2, wy - wh * 0.04, size, size);
   g.restore();
-  g.strokeStyle = "rgba(255,255,255,0.9)";
+  g.strokeStyle = mega ? "#ffd23a" : "rgba(255,255,255,0.9)";
   g.lineWidth = 4;
   roundRect(g, wx, wy, ww, wh, 12);
   g.stroke();
+
+  // A banner across the bottom of the picture for an evolved or Mega form.
+  if (critter.form > 0) {
+    const label = FORM_NAME[critter.form].toUpperCase();
+    g.fillStyle = mega ? "#ffd23a" : "#ffffff";
+    roundRect(g, W / 2 - 70, wy + wh - 30, 140, 26, 13);
+    g.fill();
+    g.fillStyle = mega ? "#5a0a0a" : css(critter.colour);
+    g.font = `bold 17px ${FONT}`;
+    g.textAlign = "center";
+    g.fillText(mega ? `⭐ ${label} ⭐` : label, W / 2, wy + wh - 16);
+    g.textAlign = "left";
+  }
 
   // Its kind and a line about it, then its three moves.
   g.fillStyle = "rgba(255,255,255,0.92)";
@@ -222,10 +262,10 @@ export interface CardArt {
 export function drawAllCards(): CardArt {
   const portraits = renderPortraits();
   const face = new Map<string, HTMLCanvasElement>();
-  for (const critter of CRITTERS) {
-    const portrait = portraits.get(critter.id);
+  for (const critter of allForms()) {
+    const portrait = portraits.get(cardKey(critter));
     if (portrait) {
-      face.set(critter.id, drawFace(critter, portrait));
+      face.set(cardKey(critter), drawFace(critter, portrait));
     }
   }
   return {face, back: drawBack()};
@@ -289,6 +329,15 @@ export class Card3D {
     this.glow.position.z = -0.12;
     this.setGlow(0);
     this.root.add(this.glow);
+  }
+
+  /** A new picture on the front, when the beast on it evolves. */
+  setFace(face: HTMLCanvasElement): void {
+    const mesh = this.root.children[0] as THREE.Mesh;
+    const front = (mesh.material as Array<THREE.MeshBasicMaterial>)[4];
+    front.map?.dispose();
+    front.map = texture(face);
+    front.needsUpdate = true;
   }
 
   /** 0 is no glow; 1 is a blaze about three cards across. */

@@ -1,9 +1,19 @@
 import * as THREE from "three";
 import {Clock, Ease, lerp} from "./anim";
 import type {Sounds} from "./audio";
-import {Card3D, type CardArt} from "./cards";
-import {ARENA, BATTLE, CARD, MOTION, TIMING} from "./config";
-import {STRONG_AGAINST, type Critter, type Move} from "./critters";
+import {Card3D, cardKey, type CardArt} from "./cards";
+import {
+  ARENA,
+  BATTLE,
+  CARD,
+  EVOLVE,
+  FORM_HIT,
+  FORM_PUFF,
+  FORM_SCALE,
+  MOTION,
+  TIMING,
+} from "./config";
+import {STRONG_AGAINST, atForm, type Critter, type Move} from "./critters";
 import {Effects} from "./effects";
 import {buildCritter, type CritterModel} from "./models";
 import type {Stage} from "./stage";
@@ -14,6 +24,8 @@ import type {Side, UI} from "./ui";
 
 export interface Trainer {
   name: string;
+  /** The form their beast is in: 0, 1 evolved, or 2 Mega. */
+  form: number;
   puff: number;
   hitScale: number;
 }
@@ -36,6 +48,8 @@ interface Fighter {
   charge: number;
   /** Seconds of white flash left after being hit. */
   flash: number;
+  /** How bright it is glowing as it evolves, 0 to 1. */
+  glow: number;
   /** A squash from landing or being hit, decaying back to 0. */
   squash: number;
   out: boolean;
@@ -58,7 +72,7 @@ export class Battle {
     private readonly clock: Clock,
     private readonly ui: UI,
     private readonly sounds: Sounds,
-    art: CardArt,
+    private readonly art: CardArt,
     playerCritter: Critter,
     foeCritter: Critter,
     private readonly trainer: Trainer,
@@ -67,7 +81,7 @@ export class Battle {
     this.player = this.makeFighter(
       "player",
       playerCritter,
-      BATTLE.playerPuff,
+      FORM_PUFF[playerCritter.form] ?? FORM_PUFF[0],
       art,
     );
     this.foe = this.makeFighter("foe", foeCritter, trainer.puff, art);
@@ -116,9 +130,9 @@ export class Battle {
     root.visible = false;
     this.stage.scene.add(root);
 
-    const face = art.face.get(critter.id);
+    const face = art.face.get(cardKey(critter));
     if (!face) {
-      throw new Error(`no card art for ${critter.id}`);
+      throw new Error(`no card art for ${cardKey(critter)}`);
     }
     const card = new Card3D(face, art.back);
     card.root.rotation.order = "YXZ";
@@ -141,6 +155,7 @@ export class Battle {
       maxPuff: puff,
       charge: 0,
       flash: 0,
+      glow: 0,
       squash: 0,
       out: false,
     };
@@ -156,8 +171,30 @@ export class Battle {
     const sq = MOTION.breathe * breathe - f.squash;
     f.model.group.scale.set(1 - sq * 0.6, 1 + sq, 1 - sq * 0.6);
     f.flash = Math.max(0, f.flash - dt);
-    const w = f.flash > 0 ? Math.min(1, f.flash / TIMING.hitFlash) : 0;
+    const hit = f.flash > 0 ? Math.min(1, f.flash / TIMING.hitFlash) : 0;
+    const w = Math.max(hit, f.glow);
     f.model.material.emissive.setRGB(w, w, w);
+    // A Mega beast smoulders: dark sparks rising round it all the time.
+    if (f.out && f.critter.form === 2 && Math.random() < 0.6) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 0.6 * (FORM_SCALE[2] ?? 1);
+      this.stage.sparks.burst(
+        new THREE.Vector3(
+          f.root.position.x + Math.cos(a) * r,
+          0.1 + Math.random() * 0.4,
+          f.root.position.z + Math.sin(a) * r,
+        ),
+        {
+          color: [f.critter.light, 0x9a5bff, 0xff3b5c],
+          count: 1,
+          speed: 0.2,
+          lift: 2.2,
+          gravity: -0.5,
+          ttl: 0.9,
+          size: 1.1,
+        },
+      );
+    }
   }
 
   private name(f: Fighter): string {
@@ -296,17 +333,23 @@ export class Battle {
     );
   }
 
+  /** How much bigger than the first form this fighter's form is. */
+  private size(f: Fighter): number {
+    return FORM_SCALE[f.critter.form] ?? 1;
+  }
+
   /** Where moves come out of: a little in front of the face. */
   private mouth(f: Fighter): THREE.Vector3 {
+    const k = this.size(f);
     return new THREE.Vector3(
-      f.spot.x + Math.sin(f.yaw) * 0.75,
-      1.1,
-      f.spot.z + Math.cos(f.yaw) * 0.75,
+      f.spot.x + Math.sin(f.yaw) * 0.75 * k,
+      1.1 * k,
+      f.spot.z + Math.cos(f.yaw) * 0.75 * k,
     );
   }
 
   private middle(f: Fighter): THREE.Vector3 {
-    return new THREE.Vector3(f.spot.x, 0.85, f.spot.z);
+    return new THREE.Vector3(f.spot.x, 0.85 * this.size(f), f.spot.z);
   }
 
   private async use(attacker: Fighter, target: Fighter, move: Move) {
@@ -344,6 +387,7 @@ export class Battle {
         from: this.mouth(attacker),
         to: this.middle(target),
         big,
+        power: this.size(attacker),
         onImpact,
       });
     }
@@ -397,6 +441,7 @@ export class Battle {
     // Only a special or super move carries its kind; a tackle is just a bump.
     const superHit = strong && move.power !== "tackle";
     let damage = roll(BATTLE.damage[move.power]);
+    damage *= FORM_HIT[attacker.critter.form] ?? 1;
     if (superHit) {
       damage *= BATTLE.superHitScale;
     }
@@ -408,7 +453,7 @@ export class Battle {
     this.ui.setPuff(target.side, target.puff, target.maxPuff);
 
     const head = this.stage.toScreen(
-      new THREE.Vector3(target.spot.x, 2.1, target.spot.z),
+      new THREE.Vector3(target.spot.x, 2.1 * this.size(target), target.spot.z),
     );
     this.ui.popup(`-${damage}`, head.x, head.y, "hit");
     if (superHit) {
@@ -487,6 +532,107 @@ export class Battle {
       },
       Ease.inOut,
     );
+  }
+
+  /**
+   * Your beast evolves, there on the roof: it glows brighter and spins faster
+   * until it bursts into its new form, bigger, with a new name and a new card.
+   */
+  async evolve(form: number): Promise<void> {
+    const f = this.player;
+    const before = f.critter;
+    const next = atForm(before, form);
+    const mega = form === 2;
+    this.ui.say(
+      mega
+        ? `${before.name} is MEGA EVOLVING!`
+        : `What? ${before.name} is evolving!`,
+    );
+    this.sounds.play("charge");
+    const colours = [next.light, 0xffffff, mega ? 0x9a5bff : next.colour];
+    await this.clock.tween(
+      EVOLVE.glow,
+      t => {
+        f.glow = t;
+        f.root.rotation.y = f.yaw + t * t * Math.PI * 10;
+        f.root.position.y = t * 0.6;
+        f.root.scale.setScalar(1 + Math.sin(t * 40) * 0.06 * t);
+        const a = Math.random() * Math.PI * 2;
+        this.stage.sparks.burst(
+          new THREE.Vector3(
+            f.spot.x + Math.cos(a) * 0.9,
+            0.1,
+            f.spot.z + Math.sin(a) * 0.9,
+          ),
+          {
+            color: colours,
+            count: 3,
+            speed: 0.4,
+            lift: 3.5,
+            ttl: 0.8,
+            size: 1.3,
+          },
+        );
+        if (Math.random() < 0.05) {
+          this.sounds.play("zap");
+        }
+      },
+      Ease.in,
+    );
+
+    // The burst: out goes the old shape, in comes the new one.
+    f.root.remove(f.model.group);
+    f.model.group.traverse(o => {
+      if (o instanceof THREE.Mesh) {
+        o.geometry.dispose();
+      }
+    });
+    f.model.material.dispose();
+    f.model = buildCritter(next);
+    f.root.add(f.model.group);
+    f.critter = next;
+    const face = this.art.face.get(cardKey(next));
+    if (face) {
+      f.card.setFace(face);
+    }
+    const at = new THREE.Vector3(f.spot.x, 1.2, f.spot.z);
+    this.stage.sparks.burst(at, {
+      color: colours,
+      count: 120,
+      speed: 6,
+      lift: 1,
+      gravity: 2,
+      ttl: 1.1,
+      size: 1.8,
+      spherical: 1,
+    });
+    this.effects.shockwave(f.spot, mega ? 0x9a5bff : 0xffffff, 2);
+    this.stage.shake(0.3, 0.7);
+    this.sounds.play("superHit");
+    this.ui.renamePanel("player", next);
+    f.maxPuff = FORM_PUFF[form] ?? f.maxPuff;
+    f.puff = f.maxPuff;
+    this.ui.setPuff("player", f.puff, f.maxPuff);
+    await this.clock.tween(
+      EVOLVE.burst,
+      t => {
+        f.root.scale.setScalar(lerp(0.5, 1, t));
+        f.root.rotation.y = f.yaw;
+        f.root.position.y = lerp(0.6, 0, t);
+        f.glow = 1 - t;
+      },
+      Ease.back,
+    );
+    f.glow = 0;
+    f.squash = 0.3;
+    this.sounds.cry(next);
+    this.ui.say(
+      mega
+        ? `${before.name} Mega Evolved into ${next.name}!`
+        : `${before.name} evolved into ${next.name}!`,
+    );
+    await this.hop(f, 0.5, 0.4);
+    await this.clock.wait(1.4);
   }
 
   /** Throws confetti over your critter and has it hop about. */

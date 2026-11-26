@@ -3,8 +3,8 @@ import {Clock} from "./anim";
 import {Sounds} from "./audio";
 import {Battle, type Trainer} from "./battle";
 import {drawAllCards, type CardArt} from "./cards";
-import {BATTLE} from "./config";
-import {CRITTERS, type Critter} from "./critters";
+import {BATTLE, EVOLVE} from "./config";
+import {CRITTERS, atForm, type Critter} from "./critters";
 import {load, save, type SaveData} from "./save";
 import {Stage} from "./stage";
 import {UI} from "./ui";
@@ -60,20 +60,34 @@ class Game {
 
   async play(): Promise<void> {
     for (;;) {
-      const mine = await this.ui.choose(this.data.picked, this.data.trophies);
+      const mine = await this.ui.choose(
+        this.data.picked,
+        this.data.trophies,
+        id => this.formOf(id),
+      );
       this.data.picked = mine.id;
       save(this.data);
       await this.ladder(mine);
     }
   }
 
+  /** The form a beast has reached, from how many fights it has won. */
+  private formOf(id: string): number {
+    const wins = this.data.wins[id] ?? 0;
+    if (wins >= EVOLVE.winsToMega) {
+      return 2;
+    }
+    return wins >= EVOLVE.winsToEvolve ? 1 : 0;
+  }
+
   /** One battle against each of the other four critters, in a random order. */
-  private async ladder(mine: Critter): Promise<void> {
+  private async ladder(picked: Critter): Promise<void> {
+    let mine = picked;
     const others = shuffle(CRITTERS.filter(c => c.id !== mine.id));
     const rounds = others.length;
     let round = 0;
     while (round < rounds) {
-      const foe = others[round];
+      const foe = atForm(others[round], BATTLE.trainers[round].form);
       const trainer: Trainer = BATTLE.trainers[round];
       this.ui.showBattle(mine, foe, trainer.name, round, rounds);
       const battle = new Battle(
@@ -93,13 +107,27 @@ class Game {
         this.sounds.play("win");
         await battle.celebrate();
         round++;
+        // Enough wins, and it evolves right there on the roof.
+        this.data.wins[mine.id] = (this.data.wins[mine.id] ?? 0) + 1;
+        save(this.data);
+        const form = this.formOf(mine.id);
+        let evolved = "";
+        if (form > mine.form) {
+          const before = mine.name;
+          await battle.evolve(form);
+          mine = atForm(mine, form);
+          evolved =
+            form === 2
+              ? `${before} Mega Evolved into ${mine.name}! `
+              : `${before} evolved into ${mine.name}! `;
+        }
         if (round === rounds) {
           this.data.trophies++;
           save(this.data);
           const choice = await this.ui.showResult(
             "🏆 Champion! 🏆",
-            `${mine.name} crushed every trainer! Nobody can beat you!`,
-            mine.id,
+            `${evolved}${mine.name} crushed every trainer! Nobody can beat you!`,
+            mine,
             [
               {id: "again", label: "Play again", main: true},
               {id: "pick", label: "Pick a new beast"},
@@ -112,9 +140,13 @@ class Game {
           return;
         }
         const choice = await this.ui.showResult(
-          "You won! 💥",
-          `${mine.name} beat ${trainer.name}! Next up: ${BATTLE.trainers[round].name}.`,
-          mine.id,
+          evolved
+            ? mine.form === 2
+              ? "MEGA EVOLVED! ⭐"
+              : "Evolved! ✨"
+            : "You won! 💥",
+          `${evolved}${mine.name} beat ${trainer.name}! Next up: ${BATTLE.trainers[round].name}.`,
+          mine,
           [
             {id: "next", label: "Next fight!", main: true},
             {id: "pick", label: "Pick a new beast"},
@@ -129,7 +161,7 @@ class Game {
         const choice = await this.ui.showResult(
           "Knocked out!",
           `${mine.name} got knocked out! Shake it off and fight again!`,
-          mine.id,
+          mine,
           [
             {id: "retry", label: "Fight again!", main: true},
             {id: "pick", label: "Pick a new beast"},

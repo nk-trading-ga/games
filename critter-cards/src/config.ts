@@ -60,20 +60,20 @@ export const TIMING = {
 };
 
 export const BATTLE = {
-  /** Puff (hit points) for the player's critter in every battle. */
-  playerPuff: 100,
   /**
    * The other trainers, in the order you meet them. Each gets a bit more puff,
    * and hits a bit harder, so the last battle is the hardest one. Their hits
    * are scaled down from yours so a child who taps anything at all still wins
    * most battles: a turn of ours is about 16, theirs about 16 × 0.6 ≈ 10 at
    * first, so the first battle takes them ten turns to win and us about four.
+   * The later trainers bring evolved and Mega beasts, but by then yours has
+   * evolved too (see EVOLVE), and its puff and its hits grow with its form.
    */
   trainers: [
-    {name: "Pip", puff: 70, hitScale: 0.6},
-    {name: "Juno", puff: 85, hitScale: 0.7},
-    {name: "Bo", puff: 100, hitScale: 0.8},
-    {name: "Rex", puff: 115, hitScale: 0.9},
+    {name: "Pip", form: 0, puff: 70, hitScale: 0.6},
+    {name: "Juno", form: 0, puff: 90, hitScale: 0.65},
+    {name: "Bo", form: 1, puff: 125, hitScale: 0.7},
+    {name: "Rex", form: 2, puff: 165, hitScale: 0.75},
   ],
   /** Damage of each kind of move, as [lowest, highest]. */
   damage: {
@@ -142,4 +142,26 @@ export const STORM = {
   /** Raindrops, and how fast they fall in units a second. */
   drops: 700,
   rainSpeed: 22,
+};
+
+/**
+ * The three forms of every beast: as it starts, evolved, and Mega Evolved.
+ * Each is bigger, has more puff and hits harder than the last.
+ */
+export const FORM_SCALE = [1, 1.15, 1.32] as const;
+export const FORM_PUFF = [100, 130, 170] as const;
+export const FORM_HIT = [1, 1.2, 1.45] as const;
+
+export const EVOLVE = {
+  /**
+   * How many fights a beast has to win to evolve, and to Mega Evolve. Counted
+   * for each beast and kept between visits, so one that has evolved stays
+   * evolved. Winning the first fight evolves it, the third Mega Evolves it,
+   * so a first run through the four trainers shows both.
+   */
+  winsToEvolve: 1,
+  winsToMega: 3,
+  /** The evolution: glowing and spinning faster, then the burst. */
+  glow: 2.2,
+  burst: 0.6,
 };

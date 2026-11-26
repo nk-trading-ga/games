@@ -1,8 +1,8 @@
 import {ProgressBar} from "../../shared/progressBar";
 import {SoundButton} from "../../shared/soundButton";
 import type {Sounds} from "./audio";
-import type {CardArt} from "./cards";
-import {CRITTERS, KIND_ICON, type Critter, type Move} from "./critters";
+import {cardKey, type CardArt} from "./cards";
+import {CRITTERS, KIND_ICON, atForm, type Critter, type Move} from "./critters";
 
 // Everything on screen that isn't the 3D world: the pick screen, the puff
 // panels, the moves, the message banner, the numbers that pop off a hit, and
@@ -125,7 +125,11 @@ export class UI {
   }
 
   /** Shows the five cards and waits for one to be picked. */
-  choose(savedId: string | undefined, trophies: number): Promise<Critter> {
+  choose(
+    savedId: string | undefined,
+    trophies: number,
+    formOf: (id: string) => number,
+  ): Promise<Critter> {
     this.hud.classList.add("hidden");
     this.result.classList.add("hidden");
     this.pick.classList.remove("hidden");
@@ -149,11 +153,13 @@ export class UI {
         this.pickGo.style.background = css(critter.colour);
         this.pickGo.classList.remove("hidden");
       };
-      for (const critter of CRITTERS) {
+      // Each card shows its beast in the form it has reached so far.
+      for (const base of CRITTERS) {
+        const critter = atForm(base, formOf(base.id));
         const b = el("button", "pick-card", this.pickCards);
         b.setAttribute("aria-label", critter.name);
         const img = el("img", "", b);
-        img.src = this.images.get(critter.id) ?? "";
+        img.src = this.images.get(cardKey(critter)) ?? "";
         img.alt = critter.name;
         img.draggable = false;
         if (critter.id === savedId) {
@@ -201,6 +207,13 @@ export class UI {
     fill("foe", foe, trainer);
     this.round.textContent = `Fight ${round + 1} of ${rounds}`;
     this.moves.classList.add("hidden");
+  }
+
+  /** A new name on a panel, when the beast in it evolves. */
+  renamePanel(side: Side, critter: Critter): void {
+    const p = this.panels[side];
+    p.name.textContent = `${KIND_ICON[critter.kind]} ${critter.name}`;
+    p.root.style.setProperty("--critter", css(critter.colour));
   }
 
   showPanel(side: Side): void {
@@ -279,7 +292,7 @@ export class UI {
   showResult(
     title: string,
     line: string,
-    critterId: string,
+    critter: Critter,
     choices: ReadonlyArray<ResultChoice>,
   ): Promise<string> {
     this.moves.classList.add("hidden");
@@ -289,7 +302,7 @@ export class UI {
     const box = el("div", "result-box", this.result);
     el("h2", "result-title", box, title);
     const img = el("img", "result-card", box);
-    img.src = this.images.get(critterId) ?? "";
+    img.src = this.images.get(cardKey(critter)) ?? "";
     img.alt = "";
     el("p", "result-line", box, line);
     const row = el("div", "result-buttons", box);

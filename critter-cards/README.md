@@ -38,6 +38,30 @@ claws, horns and spikes — and to hit hard: every hit shakes the screen and
 blasts a shockwave across the floor, and a bump rips red claw marks across the
 other beast. Nothing is gory, and losing is still gentle.
 
+## Evolution and Mega Evolution
+
+Every beast has three forms. Each is bigger, has more puff and hits harder
+(`FORM_SCALE`, `FORM_PUFF`, `FORM_HIT` in `src/config.ts`):
+
+| First form | Evolved      | Mega Evolved      |
+| ---------- | ------------ | ----------------- |
+| Blazefang  | Infernofang  | Mega Infernofang  |
+| Tidejaw    | Abyssjaw     | Mega Abyssjaw     |
+| Thornclaw  | Thornking    | Mega Thornking    |
+| Voltsting  | Stormstinger | Mega Stormstinger |
+| Rockjaw    | Magmatitan   | Mega Magmatitan   |
+
+A beast **evolves after its first win** and **Mega Evolves after its third**,
+right there on the roof: it glows, spins faster and faster, and bursts into its
+new form with a new name, a new card and full puff. Wins are counted for each
+beast and saved, so an evolved beast stays evolved, and the pick screen shows
+each one in the form it has reached. The later trainers bring evolved and Mega
+beasts too. A Mega beast smoulders, dark sparks rising round it all the time.
+
+Each builder in `src/models.ts` makes all three forms: the evolved form adds
+horns, spikes and armour to the first, and the Mega form adds again and changes
+colours — blue fire, glowing stripes, a crown, wings, a volcano.
+
 The fights happen in a **darkness world**: a stone arena on the roof of a
 skyscraper in a city at night, black towers with windows lit here and there,
 neon rings on the floor, rain, low storm clouds, and lightning striking the
@@ -66,7 +90,7 @@ npm --prefix critter-cards run build       # typechecks, then one dist/index.htm
 ```
 src/
   config.ts    every tunable number: spots, camera, timings, puff, damage
-  critters.ts  the five critters, their moves, and who is strong against whom
+  critters.ts  the five beasts, their forms, their moves, who beats whom
   models.ts    each critter built from painted primitives, toon-shaded, outlined
   cards.ts     card art drawn on a canvas, with a portrait rendered from the model
   stage.ts     renderer, the darkness city and its storm, camera, particles
@@ -75,7 +99,7 @@ src/
   anim.ts      a clock whose waits and tweens are promises
   ui.ts        pick screen, puff panels, moves, popups, result card
   audio.ts     every sound synthesised with Web Audio
-  save.ts      last critter picked, trophies, sound on or off
+  save.ts      last beast picked, wins per beast, trophies, sound on or off
 ```
 
 There are no model, texture or sound files. The card art is drawn at start-up,

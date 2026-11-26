@@ -18,6 +18,8 @@ export interface Shot {
   to: THREE.Vector3;
   /** A super move: more of everything, bigger, and the screen shakes. */
   big: boolean;
+  /** How big the attacker is: an evolved or Mega beast throws bigger. */
+  power: number;
   /** Called as each piece lands, numbered from 0. */
   onImpact: (index: number) => void;
 }
@@ -329,7 +331,7 @@ export class Effects {
 
   private fireball(shot: Shot): Promise<void> {
     const big = shot.big;
-    const s = big ? EFFECTS.superScale : 1;
+    const s = (big ? EFFECTS.superScale : 1) * shot.power;
     const count = big ? 7 : 2;
     // A super move's fireballs land around the target, not all on one spot.
     const ends = Array.from({length: count}, (_, i) =>
@@ -389,7 +391,7 @@ export class Effects {
   /** A blast of water: fat jets streaking in, bursting into spray. */
   private bubbles(shot: Shot): Promise<void> {
     const big = shot.big;
-    const s = big ? EFFECTS.superScale : 1;
+    const s = (big ? EFFECTS.superScale : 1) * shot.power;
     const count = big ? 24 : 10;
     const side = new THREE.Vector3()
       .subVectors(shot.to, shot.from)
@@ -449,7 +451,7 @@ export class Effects {
   /** A storm of thorns shot like arrows, with leaves torn up behind. */
   private leaves(shot: Shot): Promise<void> {
     const big = shot.big;
-    const s = big ? EFFECTS.superScale : 1;
+    const s = (big ? EFFECTS.superScale : 1) * shot.power;
     const count = big ? 26 : 10;
     const dir = new THREE.Vector3().subVectors(shot.to, shot.from).normalize();
     const side = new THREE.Vector3().crossVectors(dir, up).normalize();
@@ -536,7 +538,7 @@ export class Effects {
       const bolt = makeBolt(
         new THREE.Vector3(at.x + spread(0.4), 7, at.z + spread(0.4)),
         at,
-        big ? 2.2 : 1.5,
+        (big ? 2.2 : 1.5) * shot.power,
       );
       this.shockwave(at, 0xfff27a, big ? 1.4 : 1);
       this.stage.scene.add(bolt);
@@ -576,7 +578,7 @@ export class Effects {
 
   private rocks(shot: Shot): Promise<void> {
     const big = shot.big;
-    const s = big ? EFFECTS.superScale : 1;
+    const s = (big ? EFFECTS.superScale : 1) * shot.power;
     const count = big ? 12 : 4;
     const starts = Array.from({length: count}, () =>
       shot.to
