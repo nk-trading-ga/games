@@ -77,7 +77,9 @@ two without reformatting.
 
 Each game is a self-contained npm project with its own dependencies and its own
 dev server. Nothing is shared between them, and the gallery discovers them by
-looking for top-level folders with a `build` script.
+looking for top-level folders with a `build` script — though for now only the
+ones named in `ONLY_GAMES` in `site/build.mjs`, which is just Critter Cards.
+The other games are still in the repo; they are simply not built or listed.
 
 ```bash
 npm --prefix bee run dev         # http://localhost:5173, hot reload

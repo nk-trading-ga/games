@@ -159,6 +159,15 @@ const IGNORED = new Set([
   "shared",
 ]);
 
+/**
+ * The only games the site builds and lists, for now. Every other game folder
+ * stays in the repo untouched — it is just left out of the build, which keeps
+ * the site to the one game being worked on and the build quick. Empty the list
+ * to go back to building every game the repo has; a new game has to be added
+ * here before it shows up.
+ */
+const ONLY_GAMES = new Set(["critter-cards"]);
+
 /** Where we'll look for a game's card image, in order of preference. */
 const CARD_PATHS = ["card.png", "assets/card.png", "public/card.png"];
 
@@ -173,6 +182,7 @@ function discoverGames() {
     .filter(
       e => e.isDirectory() && !e.name.startsWith(".") && !IGNORED.has(e.name),
     )
+    .filter(e => ONLY_GAMES.size === 0 || ONLY_GAMES.has(e.name))
     .map(e => e.name)
     .sort()
     .map(name => {

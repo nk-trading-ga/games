@@ -88,6 +88,11 @@ bee (starter 3D scene, same configs, `card.png`, README, `game.json`) and
 installs it. A game's `game.json` `status` is `"development"` (the gallery's In
 Development section) until it is changed to `"published"`.
 
+**For now the site builds only Critter Cards.** `ONLY_GAMES` near the top of
+`site/build.mjs` lists the games it builds and shows; every other game folder is
+still here, just left out. Add a game's folder name to that list to put it back
+on the site, or empty the list to build them all again.
+
 ## Commands
 
 ```bash
