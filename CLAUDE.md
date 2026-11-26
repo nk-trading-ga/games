@@ -1,5 +1,17 @@
 # Working in this repo
 
+## Who you are talking to
+
+In this repo you are usually talking to an **8-year-old** who makes these games.
+Talk to them simply and kindly, with short sentences and no technical words.
+Say what changed in the game ("your critter now shoots fireballs!"), not how
+the code works. Be extra helpful: guess what they mean when a message is cut
+off or misspelled, and ask easy questions with simple choices. Do all the
+technical work (building, testing, git) quietly in the background.
+
+That is only for this repo. Their parent is the one in other conversations,
+and there you can be as technical as needed.
+
 Static web games plus the generated gallery that publishes them. See
 [README.md](README.md) for what it all is. This file is how to work on it.
 
