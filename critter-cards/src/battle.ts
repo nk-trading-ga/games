@@ -1,19 +1,25 @@
 import * as THREE from "three";
 import {Clock, Ease, lerp} from "./anim";
 import type {Sounds} from "./audio";
-import {Card3D, cardKey, type CardArt} from "./cards";
+import {Card3D, type CardArt} from "./cards";
 import {
   ARENA,
   BATTLE,
   CARD,
   EVOLVE,
-  FORM_HIT,
-  FORM_PUFF,
+  HUNT,
   FORM_SCALE,
   MOTION,
   TIMING,
 } from "./config";
-import {STRONG_AGAINST, atForm, type Critter, type Move} from "./critters";
+import {
+  STRONG_AGAINST,
+  atForm,
+  rarityOf,
+  type Critter,
+  type Move,
+} from "./critters";
+import {statsOf} from "./dex";
 import {Effects} from "./effects";
 import {buildCritter, type CritterModel} from "./models";
 import type {Stage} from "./stage";
@@ -55,7 +61,13 @@ interface Fighter {
   out: boolean;
 }
 
-export type Outcome = "won" | "lost";
+export type Outcome = "won" | "lost" | "caught" | "fled";
+
+/** For a fight with a wild beast: the player's Critter Balls. */
+export interface Wild {
+  balls: () => number;
+  useBall: () => void;
+}
 
 const roll = ([lo, hi]: readonly [number, number]) =>
   lo + Math.random() * (hi - lo);
@@ -76,12 +88,13 @@ export class Battle {
     playerCritter: Critter,
     foeCritter: Critter,
     private readonly trainer: Trainer,
+    private readonly wild?: Wild,
   ) {
     this.effects = new Effects(stage, clock, sounds);
     this.player = this.makeFighter(
       "player",
       playerCritter,
-      FORM_PUFF[playerCritter.form] ?? FORM_PUFF[0],
+      statsOf(playerCritter).puff,
       art,
     );
     this.foe = this.makeFighter("foe", foeCritter, trainer.puff, art);
@@ -130,10 +143,7 @@ export class Battle {
     root.visible = false;
     this.stage.scene.add(root);
 
-    const face = art.face.get(cardKey(critter));
-    if (!face) {
-      throw new Error(`no card art for ${cardKey(critter)}`);
-    }
+    const face = art.face(critter);
     const card = new Card3D(face, art.back);
     card.root.rotation.order = "YXZ";
     card.root.rotation.y = toCamera;
@@ -207,11 +217,15 @@ export class Battle {
   async run(): Promise<Outcome> {
     this.ui.setPuff("player", this.player.puff, this.player.maxPuff);
     this.ui.setPuff("foe", this.foe.puff, this.foe.maxPuff);
-    this.ui.say(`${this.trainer.name} wants to fight!`);
-    await this.clock.wait(TIMING.announce * 1.4);
-
-    this.ui.say(`${this.trainer.name} sends out ${this.foe.critter.name}!`);
-    await this.summon(this.foe);
+    if (this.wild) {
+      this.ui.say(`A wild ${this.foe.critter.name} appeared!`);
+      await this.emerge(this.foe);
+    } else {
+      this.ui.say(`${this.trainer.name} wants to fight!`);
+      await this.clock.wait(TIMING.announce * 1.4);
+      this.ui.say(`${this.trainer.name} sends out ${this.foe.critter.name}!`);
+      await this.summon(this.foe);
+    }
     this.ui.showPanel("foe");
     this.ui.say(`Go, ${this.player.critter.name}!`);
     await this.summon(this.player);
@@ -222,9 +236,19 @@ export class Battle {
         this.player.critter,
         this.player.charge,
         BATTLE.superCharge,
+        this.wild ? this.wild.balls() : undefined,
       );
-      await this.use(this.player, this.foe, move);
+      if (move === "ball") {
+        if (await this.throwBall(false)) {
+          return "caught";
+        }
+      } else {
+        await this.use(this.player, this.foe, move);
+      }
       if (this.foe.puff <= 0) {
+        if (this.wild) {
+          return this.worn();
+        }
         await this.faint(this.foe);
         return "won";
       }
@@ -441,7 +465,7 @@ export class Battle {
     // Only a special or super move carries its kind; a tackle is just a bump.
     const superHit = strong && move.power !== "tackle";
     let damage = roll(BATTLE.damage[move.power]);
-    damage *= FORM_HIT[attacker.critter.form] ?? 1;
+    damage *= statsOf(attacker.critter).power / 100;
     if (superHit) {
       damage *= BATTLE.superHitScale;
     }
@@ -591,10 +615,7 @@ export class Battle {
     f.model = buildCritter(next);
     f.root.add(f.model.group);
     f.critter = next;
-    const face = this.art.face.get(cardKey(next));
-    if (face) {
-      f.card.setFace(face);
-    }
+    f.card.setFace(this.art.face(next));
     const at = new THREE.Vector3(f.spot.x, 1.2, f.spot.z);
     this.stage.sparks.burst(at, {
       color: colours,
@@ -610,7 +631,7 @@ export class Battle {
     this.stage.shake(0.3, 0.7);
     this.sounds.play("superHit");
     this.ui.renamePanel("player", next);
-    f.maxPuff = FORM_PUFF[form] ?? f.maxPuff;
+    f.maxPuff = statsOf(next).puff;
     f.puff = f.maxPuff;
     this.ui.setPuff("player", f.puff, f.maxPuff);
     await this.clock.tween(
@@ -654,6 +675,218 @@ export class Battle {
       this.sounds.cry(this.player.critter);
       await this.hop(this.player, 0.6, 0.45);
     }
+  }
+
+  /** A wild beast climbs up out of a dark hole in the floor. */
+  private async emerge(f: Fighter): Promise<void> {
+    f.card.root.visible = false;
+    const hole = new THREE.Mesh(
+      new THREE.CircleGeometry(1, 40),
+      new THREE.MeshBasicMaterial({color: 0x0a0612, transparent: true}),
+    );
+    hole.rotation.x = -Math.PI / 2;
+    hole.position.set(f.spot.x, 0.02, f.spot.z);
+    this.stage.scene.add(hole);
+    this.sounds.play("rise");
+    await this.clock.tween(0.5, t => hole.scale.setScalar(t * 1.2), Ease.out);
+    f.root.visible = true;
+    f.root.scale.setScalar(1);
+    const depth = -2.2 * this.size(f);
+    await this.clock.tween(
+      1.0,
+      t => {
+        f.root.position.set(f.spot.x, lerp(depth, 0, t), f.spot.z);
+        this.stage.sparks.burst(new THREE.Vector3(f.spot.x, 0.1, f.spot.z), {
+          color: [0x9a5bff, 0x1a0a2a, f.critter.light],
+          count: 2,
+          speed: 1.4,
+          lift: 1.5,
+          ttl: 0.6,
+          size: 1.2,
+        });
+      },
+      Ease.out,
+    );
+    f.out = true;
+    f.squash = 0.25;
+    this.sounds.cry(f.critter);
+    this.stage.shake(0.12, 0.4);
+    await this.clock.tween(0.4, t => {
+      hole.scale.setScalar(1.2 * (1 - t));
+    });
+    this.stage.scene.remove(hole);
+    hole.geometry.dispose();
+    (hole.material as THREE.Material).dispose();
+  }
+
+  /**
+   * A wild beast out of puff can't get away: one Critter Ball and it's yours.
+   * Without one, it slinks off.
+   */
+  private async worn(): Promise<Outcome> {
+    const name = this.foe.critter.name;
+    if (!this.wild || this.wild.balls() <= 0) {
+      this.ui.say(`No Critter Balls left! ${name} ran away.`);
+      await this.faint(this.foe);
+      return "fled";
+    }
+    this.ui.say(`${name} is worn out! Throw a Critter Ball!`);
+    await this.ui.chooseBall(this.wild.balls());
+    await this.throwBall(true);
+    return "caught";
+  }
+
+  /** The ball: dark metal with a glowing ring round it. */
+  private makeBall(): THREE.Group {
+    const ball = new THREE.Group();
+    const shell = new THREE.Mesh(
+      new THREE.SphereGeometry(0.17, 20, 14),
+      new THREE.MeshToonMaterial({color: 0x2a2838}),
+    );
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.172, 0.028, 8, 32),
+      new THREE.MeshBasicMaterial({color: 0x9a5bff}),
+    );
+    ring.rotation.x = Math.PI / 2;
+    const eye = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 12, 8),
+      new THREE.MeshBasicMaterial({color: 0xff3b5c}),
+    );
+    eye.position.z = 0.16;
+    ball.add(shell, ring, eye);
+    return ball;
+  }
+
+  private disposeBall(ball: THREE.Group): void {
+    this.stage.scene.remove(ball);
+    ball.traverse(o => {
+      if (o instanceof THREE.Mesh) {
+        o.geometry.dispose();
+        (o.material as THREE.Material).dispose();
+      }
+    });
+  }
+
+  /**
+   * Throws a Critter Ball at the wild beast. It is sucked inside, the ball
+   * shakes, and either it holds — caught! — or the beast bursts back out.
+   * `sure` is for a beast that is worn out and can't escape.
+   */
+  private async throwBall(sure: boolean): Promise<boolean> {
+    if (!this.wild) {
+      return false;
+    }
+    this.wild.useBall();
+    const f = this.foe;
+    const name = f.critter.name;
+    this.ui.say("You threw a Critter Ball!");
+    this.sounds.play("whoosh");
+    const ball = this.makeBall();
+    this.stage.scene.add(ball);
+    const from = this.mouth(this.player).add(new THREE.Vector3(0, 0.6, 0));
+    const to = this.middle(f);
+    await this.clock.tween(
+      0.6,
+      t => {
+        ball.position.lerpVectors(from, to, t);
+        ball.position.y += Math.sin(Math.PI * t) * 1.6;
+        ball.rotation.x = t * 12;
+      },
+      Ease.linear,
+    );
+    this.sounds.play("pop");
+    this.stage.sparks.burst(to, {
+      color: [0x9a5bff, 0xffffff, 0xff3b5c],
+      count: 30,
+      speed: 2.5,
+      ttl: 0.5,
+      spherical: 1,
+    });
+    // Sucked in: the beast glows white and shrinks into the ball.
+    const at = f.root.position.clone();
+    await this.clock.tween(
+      0.45,
+      t => {
+        f.glow = t;
+        f.root.scale.setScalar(Math.max(0.0001, 1 - t));
+        f.root.position.lerpVectors(at, to, t);
+        ball.rotation.x = 0;
+      },
+      Ease.in,
+    );
+    f.root.visible = false;
+    const floor = new THREE.Vector3(to.x, 0.17, to.z);
+    await this.clock.tween(
+      0.4,
+      t => ball.position.lerpVectors(to, floor, t),
+      Ease.bounce,
+    );
+
+    const weak = 1 - f.puff / f.maxPuff;
+    const chance = sure
+      ? 1
+      : Math.min(
+          0.95,
+          (HUNT.catchChance[rarityOf(f.critter)] ?? 0.1) +
+            weak * HUNT.weakBonus,
+        );
+    const caught = Math.random() < chance;
+    const shakes = caught ? 3 : 1 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < shakes; i++) {
+      await this.clock.wait(0.45);
+      this.sounds.play("tap");
+      await this.clock.tween(
+        0.32,
+        t => {
+          ball.rotation.z = Math.sin(t * Math.PI * 2) * 0.45;
+        },
+        Ease.linear,
+      );
+    }
+    await this.clock.wait(0.35);
+
+    if (caught) {
+      this.stage.sparks.burst(floor, {
+        color: [0xffd23a, 0xffffff, 0x9a5bff],
+        count: 60,
+        speed: 3,
+        lift: 2.5,
+        ttl: 1,
+        size: 1.4,
+        spherical: 0.7,
+      });
+      this.sounds.play("win");
+      this.ui.say(`Gotcha! ${name} was caught!`);
+      await this.clock.wait(1.6);
+      this.disposeBall(ball);
+      return true;
+    }
+    // It breaks free.
+    this.stage.sparks.burst(floor, {
+      color: [0x9a5bff, f.critter.light, 0xffffff],
+      count: 40,
+      speed: 3,
+      ttl: 0.6,
+      spherical: 1,
+    });
+    this.sounds.play("pop");
+    this.disposeBall(ball);
+    f.root.visible = true;
+    await this.clock.tween(
+      0.4,
+      t => {
+        f.root.scale.setScalar(Math.max(0.0001, t));
+        f.root.position.lerpVectors(floor, f.spot, t);
+        f.glow = 1 - t;
+      },
+      Ease.back,
+    );
+    f.root.position.copy(f.spot);
+    f.glow = 0;
+    this.sounds.cry(f.critter);
+    this.ui.say(`Oh no! ${name} broke free!`);
+    await this.clock.wait(0.9);
+    return false;
   }
 
   /** Takes everything this battle put in the scene back out. */

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import {mergeGeometries} from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import {FORM_SCALE} from "./config";
-import type {Critter} from "./critters";
+import {EXTRA, type Body, type Critter} from "./critters";
 
 // Every critter is built here out of spheres, cones and cylinders, each painted
 // one colour, then merged into one geometry: one draw call per critter, plus
@@ -144,11 +144,12 @@ export class Parts {
 /** A wolf of fire: horns, a burning mane and tail, and a mouth full of fangs. */
 function blazefang(p: Parts, c: Critter): void {
   const f = c.form;
-  const dark = f === 2 ? 0x140a0a : 0x2e1612;
+  const L = c.look;
+  const dark = L?.dark ?? (f === 2 ? 0x140a0a : 0x2e1612);
   // The Mega form's fire burns blue.
-  const flame = f === 2 ? 0x3fb0ff : 0xff8a1f;
-  const yellow = f === 2 ? 0xd8f4ff : 0xffd23a;
-  const core = f === 2 ? 0x1a6bff : 0xff3a12;
+  const flame = L?.accent ?? (f === 2 ? 0x3fb0ff : 0xff8a1f);
+  const yellow = L?.accent2 ?? (f === 2 ? 0xd8f4ff : 0xffd23a);
+  const core = L?.accent ?? (f === 2 ? 0x1a6bff : 0xff3a12);
   p.ball(c.colour, [0, 0.74, -0.05], [0.42, 0.42, 0.72]);
   p.ball(c.colour, [0, 0.86, 0.36], [0.42, 0.44, 0.42]);
   p.ball(dark, [0, 0.6, 0.05], [0.32, 0.28, 0.56]);
@@ -171,7 +172,13 @@ function blazefang(p: Parts, c: Critter): void {
   for (const s of [-1, 1]) {
     p.fang([s * 0.1, 1.01, 1.1], 0.035, 0.13);
     p.fang([s * 0.07, 0.98, 1.06], 0.025, 0.08, true);
-    p.eye([s * 0.15, 1.27, 0.89], 0.07, f === 2 ? 0x9fdcff : 0xffe14a, dark, s);
+    p.eye(
+      [s * 0.15, 1.27, 0.89],
+      0.07,
+      L?.eye ?? (f === 2 ? 0x9fdcff : 0xffe14a),
+      dark,
+      s,
+    );
     p.cone(dark, [s * 0.17, 1.52, 0.5], 0.07, 0.44, [-0.7, 0, -s * 0.3]);
     p.cone(c.colour, [s * 0.26, 1.42, 0.58], 0.09, 0.22, [-0.2, 0, -s * 0.5]);
     if (f >= 1) {
@@ -224,10 +231,11 @@ function blazefang(p: Parts, c: Critter): void {
 /** A shark that walks: rows of teeth, a dorsal fin, red eyes. */
 function tidejaw(p: Parts, c: Critter): void {
   const f = c.form;
-  const belly = f === 2 ? 0x9fb4c8 : 0xdfe9f0;
-  const fin = f === 2 ? 0x0a1830 : 0x1d4680;
-  const bone = 0xc8d4dc;
-  const glow = 0x6ff0ff;
+  const L = c.look;
+  const belly = L?.belly ?? (f === 2 ? 0x9fb4c8 : 0xdfe9f0);
+  const fin = L?.dark ?? (f === 2 ? 0x0a1830 : 0x1d4680);
+  const bone = L?.accent2 ?? 0xc8d4dc;
+  const glow = L?.accent ?? 0x6ff0ff;
   p.ball(c.colour, [0, 0.76, -0.05], [0.46, 0.45, 0.85]);
   p.ball(belly, [0, 0.62, 0.1], [0.37, 0.32, 0.7]);
   p.ball(c.colour, [0, 0.86, 0.68], [0.39, 0.34, 0.42]);
@@ -251,7 +259,13 @@ function tidejaw(p: Parts, c: Critter): void {
     }
   }
   for (const s of [-1, 1]) {
-    p.eye([s * 0.25, 1.0, 0.84], 0.065, f === 2 ? glow : 0xff3b3b, fin, s);
+    p.eye(
+      [s * 0.25, 1.0, 0.84],
+      0.065,
+      L?.eye ?? (f === 2 ? glow : 0xff3b3b),
+      fin,
+      s,
+    );
     for (let k = 0; k < 3; k++) {
       p.add(new THREE.BoxGeometry(0.02, 0.2, 0.035), fin, [
         s * 0.43,
@@ -326,10 +340,11 @@ function tidejaw(p: Parts, c: Critter): void {
 /** A great green beast on two legs, covered in thorns, with big claws. */
 function thornclaw(p: Parts, c: Critter): void {
   const f = c.form;
-  const dark = f === 2 ? 0x0f3514 : 0x1b4d22;
-  const thorn = 0xd8b67a;
-  const leaf = f === 2 ? 0xb8ff5a : 0x7ed957;
-  const bark = 0x6b4a2a;
+  const L = c.look;
+  const dark = L?.dark ?? (f === 2 ? 0x0f3514 : 0x1b4d22);
+  const thorn = L?.accent2 ?? 0xd8b67a;
+  const leaf = L?.accent ?? (f === 2 ? 0xb8ff5a : 0x7ed957);
+  const bark = L ? L.dark : 0x6b4a2a;
   const claw = f === 2 ? 0.11 : 0.08;
   for (const s of [-1, 1]) {
     p.rod(dark, [s * 0.25, 0.26, 0], 0.15, 0.52);
@@ -337,7 +352,11 @@ function thornclaw(p: Parts, c: Critter): void {
     p.claws([s * 0.25, 0.06, 0.3], claw);
   }
   p.ball(c.colour, [0, 0.96, 0], [0.52, 0.56, 0.43]);
-  p.ball(f === 2 ? 0x3c7a30 : 0x5e9c48, [0, 0.88, 0.2], [0.37, 0.42, 0.3]);
+  p.ball(
+    L?.belly ?? (f === 2 ? 0x3c7a30 : 0x5e9c48),
+    [0, 0.88, 0.2],
+    [0.37, 0.42, 0.3],
+  );
   for (const s of [-1, 1]) {
     p.rod(dark, [s * 0.56, 0.86, 0.12], 0.13, 0.56, [0.2, 0, s * 0.35]);
     p.ball(dark, [s * 0.66, 0.58, 0.22], 0.16);
@@ -370,7 +389,13 @@ function thornclaw(p: Parts, c: Critter): void {
   p.ball(dark, [0, 1.37, 0.37], [0.15, 0.05, 0.13]);
   for (const s of [-1, 1]) {
     p.fang([s * 0.08, 1.42, 0.5], 0.03, 0.1);
-    p.eye([s * 0.13, 1.61, 0.4], 0.06, f === 2 ? leaf : 0xff6a1f, dark, s);
+    p.eye(
+      [s * 0.13, 1.61, 0.4],
+      0.06,
+      L?.eye ?? (f === 2 ? leaf : 0xff6a1f),
+      dark,
+      s,
+    );
     p.ball(leaf, [s * 0.11, 1.88, 0.03], [0.06, 0.24, 0.03], [0, 0, -s * 0.4]);
   }
   // A row of thorns down the spine, and more of them once it has evolved.
@@ -411,8 +436,9 @@ function thornclaw(p: Parts, c: Critter): void {
 /** A scorpion that crackles: pincers, six legs, and a lightning stinger. */
 function voltsting(p: Parts, c: Critter): void {
   const f = c.form;
-  const dark = f === 2 ? 0x1a1630 : 0x2a2438;
-  const glow = 0x8ff7ff;
+  const L = c.look;
+  const dark = L?.dark ?? (f === 2 ? 0x1a1630 : 0x2a2438);
+  const glow = L?.accent ?? 0x8ff7ff;
   // On the Mega form the stripes glow instead of being dark.
   const stripe = f === 2 ? glow : dark;
   const pinch = f >= 1 ? 1.3 : 1;
@@ -432,7 +458,7 @@ function voltsting(p: Parts, c: Critter): void {
   }
   p.ball(dark, [0, 0.5, 0.55], [0.27, 0.2, 0.22]);
   for (const s of [-1, 1]) {
-    p.eye([s * 0.1, 0.6, 0.73], 0.055, glow, c.colour, s);
+    p.eye([s * 0.1, 0.6, 0.73], 0.055, L?.eye ?? glow, c.colour, s);
     p.ball(glow, [s * 0.19, 0.55, 0.68], 0.03);
     p.cone(FANG, [s * 0.07, 0.4, 0.76], 0.03, 0.12, [Math.PI * 0.6, 0, 0]);
     // An arm out front, ending in a pincer with two sharp fingers.
@@ -501,9 +527,10 @@ function voltsting(p: Parts, c: Critter): void {
 /** A golem of rock with lava in its cracks and crystals on its back. */
 function rockjaw(p: Parts, c: Critter): void {
   const f = c.form;
-  const dark = f === 2 ? 0x16141a : 0x4a443e;
-  const lava = 0xff6a1f;
-  const crystal = 0xb06bff;
+  const L = c.look;
+  const dark = L?.dark ?? (f === 2 ? 0x16141a : 0x4a443e);
+  const lava = L?.accent ?? 0xff6a1f;
+  const crystal = L?.accent2 ?? 0xb06bff;
   const fist = f >= 1 ? 0.33 : 0.27;
   for (const s of [-1, 1]) {
     p.lump(dark, [s * 0.26, 0.2, 0], [0.22, 0.24, 0.24]);
@@ -608,13 +635,161 @@ function rockjaw(p: Parts, c: Critter): void {
   }
 }
 
-const BUILDERS: Record<string, (p: Parts, c: Critter) => void> = {
-  blazefang,
-  tidejaw,
-  thornclaw,
-  voltsting,
-  rockjaw,
+const BUILDERS: Record<Body, (p: Parts, c: Critter) => void> = {
+  wolf: blazefang,
+  shark: tidejaw,
+  giant: thornclaw,
+  scorpion: voltsting,
+  golem: rockjaw,
 };
+
+/**
+ * Where on each body plan the extra parts go: the top of its head, where
+ * horns sprout, a line down its back, and its shoulders.
+ */
+const ANCHORS: Record<
+  Body,
+  {head: V3; horn: V3; back: Array<V3>; shoulder: V3; chest: V3}
+> = {
+  wolf: {
+    head: [0, 1.48, 0.6],
+    horn: [0.15, 1.42, 0.66],
+    back: [
+      [0, 1.17, 0.25],
+      [0, 1.16, 0.0],
+      [0, 1.14, -0.25],
+      [0, 1.1, -0.5],
+    ],
+    shoulder: [0.36, 1.12, 0.3],
+    chest: [0, 0.95, 0.78],
+  },
+  shark: {
+    head: [0, 1.2, 0.75],
+    horn: [0.17, 1.14, 0.8],
+    back: [
+      [0, 1.2, 0.4],
+      [0, 1.2, 0.15],
+      [0, 1.16, -0.35],
+      [0, 1.1, -0.6],
+    ],
+    shoulder: [0.4, 1.02, 0.2],
+    chest: [0, 0.7, 0.75],
+  },
+  giant: {
+    head: [0, 1.84, 0.15],
+    horn: [0.17, 1.78, 0.18],
+    back: [
+      [0, 1.65, -0.2],
+      [0, 1.4, -0.38],
+      [0, 1.1, -0.44],
+      [0, 0.8, -0.42],
+    ],
+    shoulder: [0.44, 1.32, 0],
+    chest: [0, 1.08, 0.45],
+  },
+  scorpion: {
+    head: [0, 0.72, 0.55],
+    horn: [0.1, 0.7, 0.62],
+    back: [
+      [0, 0.8, 0.28],
+      [0, 0.81, 0.05],
+      [0, 0.8, -0.18],
+      [0, 0.77, -0.4],
+    ],
+    shoulder: [0.3, 0.74, 0.12],
+    chest: [0, 0.45, 0.7],
+  },
+  golem: {
+    head: [0, 1.74, 0.15],
+    horn: [0.2, 1.68, 0.18],
+    back: [
+      [0, 1.38, -0.3],
+      [0, 1.2, -0.48],
+      [0, 0.95, -0.52],
+      [0, 0.7, -0.48],
+    ],
+    shoulder: [0.66, 1.3, 0],
+    chest: [0, 1.0, 0.52],
+  },
+};
+
+/** The extra parts a generated beast has, added onto its body plan. */
+function addExtras(p: Parts, c: Critter): void {
+  const L = c.look;
+  if (!L || !c.extras) {
+    return;
+  }
+  const a = ANCHORS[c.body];
+  const x = c.extras;
+  if (x & EXTRA.horns) {
+    for (const s of [-1, 1]) {
+      const [hx, hy, hz] = a.horn;
+      p.cone(L.dark, [s * hx, hy + 0.12, hz], 0.06, 0.34, [-0.4, 0, -s * 0.55]);
+      p.cone(L.accent2, [s * (hx + 0.1), hy + 0.32, hz - 0.12], 0.035, 0.18, [
+        -0.9,
+        0,
+        -s * 0.3,
+      ]);
+    }
+  }
+  if (x & EXTRA.spikes) {
+    for (const at of a.back) {
+      p.cone(L.accent2, at, 0.06, 0.3, [-0.6, 0, 0]);
+    }
+  }
+  if (x & EXTRA.wings) {
+    // Bat wings from the shoulders: a dark sail on three long bones.
+    for (const s of [-1, 1]) {
+      const [sx, sy, sz] = a.shoulder;
+      p.ball(
+        L.dark,
+        [s * (sx + 0.42), sy + 0.32, sz - 0.2],
+        [0.5, 0.03, 0.28],
+        [0.3, s * 0.35, -s * 0.55],
+      );
+      for (let k = 0; k < 3; k++) {
+        p.cone(
+          L.accent,
+          [s * (sx + 0.2 + k * 0.22), sy + 0.25 + k * 0.17, sz - 0.1 - k * 0.1],
+          0.025,
+          0.6,
+          [-0.3, 0, -s * (1.0 - k * 0.15)],
+        );
+      }
+    }
+  }
+  if (x & EXTRA.crown) {
+    for (let k = -2; k <= 2; k++) {
+      const [cx, cy, cz] = a.head;
+      p.cone(
+        L.accent,
+        [cx + k * 0.07, cy + 0.06 - Math.abs(k) * 0.02, cz],
+        0.03,
+        0.2 - Math.abs(k) * 0.03,
+        [0, 0, -k * 0.25],
+      );
+    }
+  }
+  if (x & EXTRA.armour) {
+    for (const s of [-1, 1]) {
+      const [sx, sy, sz] = a.shoulder;
+      p.lump(L.dark, [s * sx, sy, sz], [0.17, 0.12, 0.18]);
+      p.cone(L.accent2, [s * (sx + 0.05), sy + 0.15, sz], 0.04, 0.2, [
+        0,
+        0,
+        -s * 0.5,
+      ]);
+    }
+  }
+  if (x & EXTRA.gem) {
+    p.add(
+      new THREE.OctahedronGeometry(0.08),
+      L.accent,
+      a.chest,
+      [0.8, 1.3, 0.8],
+    );
+  }
+}
 
 let gradient: THREE.DataTexture | undefined;
 
@@ -681,15 +856,17 @@ export interface CritterModel {
 
 export function buildCritter(c: Critter): CritterModel {
   const parts = new Parts();
-  const build = BUILDERS[c.id];
-  if (!build) {
-    throw new Error(`no model for ${c.id}`);
-  }
-  build(parts, c);
+  BUILDERS[c.body](parts, c);
+  addExtras(parts, c);
   const geometry = parts.build();
-  // Each form is bigger than the last, still standing on y = 0.
-  const grow = FORM_SCALE[c.form] ?? 1;
-  geometry.scale(grow, grow, grow);
+  // Each form is bigger than the last, still standing on y = 0; and each
+  // species is stretched its own way, wider or taller than its body plan.
+  const grow = (FORM_SCALE[c.form] ?? 1) * (c.tier >= 4 ? 1.25 : 1);
+  geometry.scale(
+    grow * c.shape.wide,
+    grow * c.shape.tall,
+    grow * (0.5 + c.shape.wide / 2),
+  );
   geometry.computeBoundingSphere();
   const material = toonMaterial();
   const group = new THREE.Group();

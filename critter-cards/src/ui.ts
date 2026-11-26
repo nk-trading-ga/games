@@ -1,7 +1,7 @@
 import {ProgressBar} from "../../shared/progressBar";
 import {SoundButton} from "../../shared/soundButton";
 import type {Sounds} from "./audio";
-import {cardKey, type CardArt} from "./cards";
+import type {CardArt} from "./cards";
 import {CRITTERS, KIND_ICON, atForm, type Critter, type Move} from "./critters";
 
 // Everything on screen that isn't the 3D world: the pick screen, the puff
@@ -59,18 +59,14 @@ export class UI {
   private readonly charge: ProgressBar;
   private readonly result: HTMLDivElement;
   private readonly popups: HTMLDivElement;
-  private readonly images = new Map<string, string>();
 
   constructor(
     mount: HTMLElement,
-    art: CardArt,
+    private readonly art: CardArt,
     private readonly sounds: Sounds,
     muted: boolean,
     onMute: (muted: boolean) => void,
   ) {
-    for (const [id, canvas] of art.face) {
-      this.images.set(id, canvas.toDataURL("image/png"));
-    }
     this.root = el("div", "ui", mount);
 
     // ---- pick screen
@@ -96,7 +92,7 @@ export class UI {
     this.round = el("div", "round", this.hud);
     this.banner = el("div", "banner hidden", this.hud);
     this.moves = el("div", "moves hidden", this.hud);
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       const b = el("button", "move", this.moves);
       this.moveButtons.push(b);
     }
@@ -159,7 +155,7 @@ export class UI {
         const b = el("button", "pick-card", this.pickCards);
         b.setAttribute("aria-label", critter.name);
         const img = el("img", "", b);
-        img.src = this.images.get(cardKey(critter)) ?? "";
+        img.src = this.art.url(critter);
         img.alt = critter.name;
         img.draggable = false;
         if (critter.id === savedId) {
@@ -216,6 +212,18 @@ export class UI {
     p.root.style.setProperty("--critter", css(critter.colour));
   }
 
+  /** The little label at the top: which fight, or how many balls. */
+  setRound(text: string): void {
+    this.round.textContent = text;
+  }
+
+  /** Clears the battle screens away, for the menus. */
+  hideAll(): void {
+    this.hud.classList.add("hidden");
+    this.result.classList.add("hidden");
+    this.pick.classList.add("hidden");
+  }
+
   showPanel(side: Side): void {
     this.panels[side].root.classList.remove("hidden");
   }
@@ -248,7 +256,12 @@ export class UI {
    * Shows the three moves and waits for one to be tapped. The super move is
    * greyed out until it has charged up, with a bar showing how far it has got.
    */
-  chooseMove(critter: Critter, charge: number, needed: number): Promise<Move> {
+  chooseMove(
+    critter: Critter,
+    charge: number,
+    needed: number,
+    balls?: number,
+  ): Promise<Move | "ball"> {
     this.hush();
     this.moves.classList.remove("hidden");
     const ready = charge >= needed;
@@ -277,7 +290,43 @@ export class UI {
           resolve(move);
         };
       });
+      this.ballButton(balls, () => resolve("ball"));
     });
+  }
+
+  /** Only the Critter Ball button, for a wild beast too worn out to fight. */
+  chooseBall(balls: number): Promise<void> {
+    this.moves.classList.remove("hidden");
+    for (const b of this.moveButtons) {
+      b.className = "move hidden";
+    }
+    return new Promise(resolve => {
+      this.ballButton(balls, () => resolve());
+    });
+  }
+
+  /** The fourth button, in a fight with a wild beast. */
+  private ballButton(balls: number | undefined, onThrow: () => void): void {
+    const b = this.moveButtons[3];
+    if (balls === undefined) {
+      b.className = "move hidden";
+      return;
+    }
+    b.replaceChildren();
+    b.className = "move move-ball";
+    el("span", "move-icon", b, "🔮");
+    el("span", "move-name", b, "Critter Ball");
+    el("span", "move-count", b, `× ${balls}`);
+    b.disabled = balls <= 0;
+    b.onclick = () => {
+      if (b.disabled) {
+        return;
+      }
+      this.sounds.unlock();
+      this.sounds.play("tap");
+      this.moves.classList.add("hidden");
+      onThrow();
+    };
   }
 
   /** A number or a word that jumps off a critter and floats away. */
@@ -302,7 +351,7 @@ export class UI {
     const box = el("div", "result-box", this.result);
     el("h2", "result-title", box, title);
     const img = el("img", "result-card", box);
-    img.src = this.images.get(cardKey(critter)) ?? "";
+    img.src = this.art.url(critter);
     img.alt = "";
     el("p", "result-line", box, line);
     const row = el("div", "result-buttons", box);

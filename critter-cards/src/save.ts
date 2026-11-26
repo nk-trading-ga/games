@@ -1,15 +1,41 @@
-// What the game remembers between visits: which critter you picked last, and
-// how many times you have beaten every trainer, whether the sound is off, and how many fights each beast has won.
+// What the game remembers between visits: the cards you have, your packs and
+// Critter Balls, which beast you fight with, how many fights each species has
+// won (which is what makes it evolve), trophies, and whether the sound is off.
 
 const KEY = "critter-cards";
 
 export interface SaveData {
-  picked?: string;
+  /** Card number → how many of it you have. */
+  owned: Record<number, number>;
+  packs: number;
+  balls: number;
+  /** The card number of the beast you fight with; 0 before you have one. */
+  active: number;
+  /** Fights each species has won, by id. */
+  wins: Record<string, number>;
   trophies: number;
   muted: boolean;
-  /** Fights each beast has won, by id: what makes it evolve. */
-  wins: Record<string, number>;
+  /** The starter picked, from before there was a card book. */
+  picked?: string;
 }
+
+function blank(): SaveData {
+  return {
+    owned: {},
+    packs: 0,
+    balls: 0,
+    active: 0,
+    wins: {},
+    trophies: 0,
+    muted: false,
+  };
+}
+
+const record = <T>(v: unknown): Record<string, T> =>
+  typeof v === "object" && v !== null ? (v as Record<string, T>) : {};
+
+const num = (v: unknown, fallback = 0) =>
+  typeof v === "number" && Number.isFinite(v) ? v : fallback;
 
 export function load(): SaveData {
   try {
@@ -17,16 +43,20 @@ export function load(): SaveData {
     if (raw) {
       const d = JSON.parse(raw) as Partial<SaveData>;
       return {
-        picked: typeof d.picked === "string" ? d.picked : undefined,
-        trophies: typeof d.trophies === "number" ? d.trophies : 0,
+        owned: record<number>(d.owned),
+        packs: num(d.packs),
+        balls: num(d.balls),
+        active: num(d.active),
+        wins: record<number>(d.wins),
+        trophies: num(d.trophies),
         muted: d.muted === true,
-        wins: typeof d.wins === "object" && d.wins ? d.wins : {},
+        picked: typeof d.picked === "string" ? d.picked : undefined,
       };
     }
   } catch {
     // Private browsing, or storage switched off: start fresh every time.
   }
-  return {trophies: 0, muted: false, wins: {}};
+  return blank();
 }
 
 export function save(data: SaveData): void {

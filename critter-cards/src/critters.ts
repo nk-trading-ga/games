@@ -1,4 +1,6 @@
-// The five beasts you can pick from, and what each of them can do.
+// The beasts, and what each of them can do. The five here are the starters,
+// built by hand; dex.ts makes the rest of the thousand cards from the same
+// five body plans and adds them to SPECIES.
 
 export type Kind = "fire" | "water" | "leaf" | "spark" | "rock";
 
@@ -14,13 +16,57 @@ export interface Move {
   icon: string;
 }
 
+/** The five body plans every beast is built on. */
+export type Body = "wolf" | "shark" | "giant" | "scorpion" | "golem";
+
+/**
+ * A beast's colours beyond its body colour. The starters leave it out and use
+ * the colours their builders were drawn with; generated beasts set it.
+ */
+export interface Look {
+  /** Legs, jaws, brows: the darker parts. */
+  dark: number;
+  /** Flames, fins, thorns, lava, crystals: the part that marks its kind. */
+  accent: number;
+  /** A second accent, for flame tips, bone and the like. */
+  accent2: number;
+  eye: number;
+  /** Belly and muzzle. */
+  belly: number;
+}
+
 /** What changes when a beast evolves: its name, its look, its card. */
 export interface Form {
   name: string;
   blurb: string;
   colour: number;
   light: number;
+  look?: Look;
+  extras?: number;
 }
+
+/**
+ * Extra parts a generated beast can have, as bits: added on top of its body
+ * plan by models.ts, which is most of what makes one beast look unlike the
+ * next.
+ */
+export const EXTRA = {
+  horns: 1,
+  spikes: 2,
+  wings: 4,
+  crown: 8,
+  armour: 16,
+  gem: 32,
+} as const;
+
+export const RARITY = [
+  "Common",
+  "Rare",
+  "Epic",
+  "Legendary",
+  "Mythic",
+] as const;
+export const RARITY_STARS = ["★", "★★", "★★★", "★★★★", "✦✦✦✦✦"] as const;
 
 export interface Critter {
   id: string;
@@ -29,8 +75,22 @@ export interface Critter {
    * in CRITTERS is form 0; `atForm` gives the same beast in another form.
    */
   form: number;
+  /** Its place in SPECIES; its card number comes from this and its form. */
+  index: number;
   name: string;
   kind: Kind;
+  body: Body;
+  look?: Look;
+  /** Which EXTRA parts it has. */
+  extras: number;
+  /** Stretch: how wide and tall it is next to the plain body plan. */
+  shape: {wide: number; tall: number};
+  /** 0 common, 1 rare, 2 epic: how rare its first form is. */
+  tier: number;
+  /** For the card's details: in metres and kilos, and where it lives. */
+  height: number;
+  weight: number;
+  home: string;
   /** One line for the card, in words a child can read. */
   blurb: string;
   /** Main body colour, also the card's colour. */
@@ -78,6 +138,14 @@ export const CRITTERS: ReadonlyArray<Critter> = [
   {
     id: "blazefang",
     form: 0,
+    index: 0,
+    body: "wolf",
+    extras: 0,
+    shape: {wide: 1, tall: 1},
+    tier: 1,
+    height: 1.3,
+    weight: 210,
+    home: "the burning factory",
     name: "Blazefang",
     kind: "fire",
     blurb: "A horned wolf with a burning mane. Its bite is red hot.",
@@ -109,6 +177,14 @@ export const CRITTERS: ReadonlyArray<Critter> = [
   {
     id: "tidejaw",
     form: 0,
+    index: 1,
+    body: "shark",
+    extras: 0,
+    shape: {wide: 1, tall: 1},
+    tier: 1,
+    height: 1.7,
+    weight: 420,
+    home: "the flooded subway",
     name: "Tidejaw",
     kind: "water",
     blurb: "A shark that walks on land, with rows and rows of teeth.",
@@ -139,6 +215,14 @@ export const CRITTERS: ReadonlyArray<Critter> = [
   {
     id: "thornclaw",
     form: 0,
+    index: 2,
+    body: "giant",
+    extras: 0,
+    shape: {wide: 1, tall: 1},
+    tier: 1,
+    height: 2.4,
+    weight: 640,
+    home: "the overgrown park",
     name: "Thornclaw",
     kind: "leaf",
     blurb: "A giant of the jungle, covered in thorns as sharp as knives.",
@@ -169,6 +253,14 @@ export const CRITTERS: ReadonlyArray<Critter> = [
   {
     id: "voltsting",
     form: 0,
+    index: 3,
+    body: "scorpion",
+    extras: 0,
+    shape: {wide: 1, tall: 1},
+    tier: 1,
+    height: 1.1,
+    weight: 95,
+    home: "the power station",
     name: "Voltsting",
     kind: "spark",
     blurb: "A giant scorpion. Its tail is full of lightning.",
@@ -203,6 +295,14 @@ export const CRITTERS: ReadonlyArray<Critter> = [
   {
     id: "rockjaw",
     form: 0,
+    index: 4,
+    body: "golem",
+    extras: 0,
+    shape: {wide: 1, tall: 1},
+    tier: 1,
+    height: 2.6,
+    weight: 1500,
+    home: "the old quarry",
     name: "Rockjaw",
     kind: "rock",
     blurb: "A rock giant with lava inside. It can smash a mountain.",
@@ -238,11 +338,41 @@ export function critterById(id: string): Critter | undefined {
 
 /** The same beast in another form: 0 as it starts, 1 evolved, 2 Mega. */
 export function atForm(critter: Critter, form: number): Critter {
-  const base = CRITTERS.find(c => c.id === critter.id) ?? critter;
-  if (form <= 0) {
+  const base = SPECIES[critter.index] ?? critter;
+  if (form <= base.form) {
     return base;
   }
-  return {...base, ...base.evolutions[Math.min(form, 2) - 1], form};
+  const evolved = base.evolutions[Math.min(form, 2) - 1];
+  return {
+    ...base,
+    ...evolved,
+    extras: base.extras | (evolved.extras ?? 0),
+    form,
+  };
+}
+
+/**
+ * Every species: the five starters, then everything dex.ts generates. Index i
+ * is species i, so `atForm` can find a beast's other forms from any one.
+ */
+export const SPECIES: Array<Critter> = [...CRITTERS];
+
+/** The number on its card: three per species, one for each form. */
+export function cardNumber(critter: Critter): number {
+  // The one-of-a-kind beast has only its last form, and the last number.
+  if (critter.tier >= 4) {
+    return critter.index * 3 + 1;
+  }
+  return critter.index * 3 + critter.form + 1;
+}
+
+/** Rarity: rarer species, and later forms, are rarer cards. */
+export function rarityOf(critter: Critter): number {
+  if (critter.tier >= 4) {
+    return 4;
+  }
+  const r = Math.min(3, critter.tier + critter.form);
+  return critter.form === 2 ? Math.max(2, r) : r;
 }
 
 export const FORM_NAME = ["", "Evolved", "Mega"] as const;

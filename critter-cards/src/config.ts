@@ -165,3 +165,44 @@ export const EVOLVE = {
   glow: 2.2,
   burst: 0.6,
 };
+
+export const DEX = {
+  /** Every generated beast comes from this seed: change it, change them all. */
+  seed: 2026,
+  /**
+   * Species, the five starters included. Three cards each, one per form, and
+   * one more for the Darkness King: 333 × 3 + 1 = 1000 cards.
+   */
+  species: 333,
+};
+
+/**
+ * How often each rarity turns up — Common, Rare, Epic, Legendary, Mythic — as
+ * weights. A booster pack has five cards; the last is the lucky one.
+ */
+export const PACKS = {
+  cards: 5,
+  odds: [70, 24, 5, 1, 0] as const,
+  luckyOdds: [0, 60, 28, 11, 1] as const,
+  /** Packs to start with, and what winning a fight earns. */
+  start: 3,
+  perWin: 1,
+  forChampion: 3,
+};
+
+export const HUNT = {
+  /** Which rarities wild beasts come in. */
+  odds: [60, 28, 10, 2, 0] as const,
+  /** Critter Balls to start with, and how many a won fight gives. */
+  startBalls: 10,
+  ballsPerWin: 2,
+  /**
+   * The chance a ball holds, by rarity, with a beast at full puff. It goes up
+   * as its puff goes down, by `weakBonus` at no puff at all; and a beast
+   * knocked out can't get away.
+   */
+  catchChance: [0.5, 0.35, 0.22, 0.12, 0.05] as const,
+  weakBonus: 0.5,
+  /** Wild beasts hit softer than trainers' do. */
+  hitScale: 0.55,
+};
