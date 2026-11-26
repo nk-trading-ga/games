@@ -1,0 +1,529 @@
+import * as THREE from "three";
+import {mergeGeometries} from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import {Clock, Ease, lerp} from "./anim";
+import type {Sounds} from "./audio";
+import {EFFECTS} from "./config";
+import type {EffectKind} from "./critters";
+import {toonMaterial} from "./models";
+import type {Stage} from "./stage";
+
+// What every special move looks like. Each one throws something from one
+// critter at the other and calls back as each piece lands, so the battle can
+// flash the target and knock it back in time with the picture.
+
+export interface Shot {
+  /** Where the move comes from: the attacker's face. */
+  from: THREE.Vector3;
+  /** Where it lands: the middle of the target. */
+  to: THREE.Vector3;
+  /** A super move: more of everything, bigger, and the screen shakes. */
+  big: boolean;
+  /** Called as each piece lands, numbered from 0. */
+  onImpact: (index: number) => void;
+}
+
+interface Volley {
+  count: number;
+  flight: number;
+  stagger: number;
+  make: (i: number) => THREE.Object3D;
+  /** Where piece `i` is at time t along its flight, written into `out`. */
+  path: (t: number, i: number, out: THREE.Vector3) => void;
+  /** Anything else a piece does each frame: spin, leave a trail. */
+  frame?: (piece: THREE.Object3D, t: number, dt: number) => void;
+  /** The splash where it lands. */
+  land: (at: THREE.Vector3, i: number) => void;
+}
+
+const FIRE = [0xff4a1c, 0xff9a1f, 0xffe14a];
+const WATER = [0x7fd0ff, 0xbfe9ff, 0xffffff];
+const LEAF = [0x4fb35f, 0x8fe07f, 0x2f8a3f];
+const PETAL = [0xff7fb8, 0xffb3d6, 0xffd84a];
+const SPARK = [0xfff27a, 0xffffff, 0xffcc1f];
+const DUST = [0xb8a68c, 0x9a8f80, 0xe2dbcf];
+
+const up = new THREE.Vector3(0, 1, 0);
+
+// Shared geometry and materials, made once and kept: effects come and go every
+// turn and there's no reason to rebuild these each time.
+const sphere = new THREE.SphereGeometry(1, 16, 12);
+const fireCore = new THREE.MeshBasicMaterial({color: 0xfff1a0});
+const fireShell = new THREE.MeshBasicMaterial({
+  color: 0xff6a1f,
+  transparent: true,
+  opacity: 0.75,
+});
+const bubbleMat = new THREE.MeshBasicMaterial({
+  color: 0x7fd0ff,
+  transparent: true,
+  opacity: 0.55,
+  depthWrite: false,
+});
+const shineMat = new THREE.MeshBasicMaterial({color: 0xffffff});
+const boltMat = new THREE.MeshBasicMaterial({color: 0xfff27a});
+const boltGlow = new THREE.MeshBasicMaterial({
+  color: 0xffffff,
+  transparent: true,
+  opacity: 0.45,
+  depthWrite: false,
+});
+
+function painted(geo: THREE.BufferGeometry, colour: number) {
+  const g = geo.index ? geo.toNonIndexed() : geo;
+  const c = new THREE.Color(colour);
+  const n = g.attributes.position.count;
+  const paint = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    paint.set([c.r, c.g, c.b], i * 3);
+  }
+  g.setAttribute("color", new THREE.BufferAttribute(paint, 3));
+  return g;
+}
+
+const leafGeo = painted(new THREE.SphereGeometry(1, 10, 6), 0x4fb35f);
+const petalGeo = painted(new THREE.SphereGeometry(1, 10, 6), 0xff8fc4);
+const rockGeo = [0x9a8f80, 0x857a6c, 0xb0a593].map(c =>
+  painted(new THREE.IcosahedronGeometry(1, 0), c),
+);
+const toon = toonMaterial();
+
+const spread = (k: number) => (Math.random() * 2 - 1) * k;
+
+export class Effects {
+  constructor(
+    private readonly stage: Stage,
+    private readonly clock: Clock,
+    private readonly sounds: Sounds,
+  ) {}
+
+  play(kind: EffectKind, shot: Shot): Promise<void> {
+    switch (kind) {
+      case "fireball":
+        return this.fireball(shot);
+      case "bubbles":
+        return this.bubbles(shot);
+      case "leaves":
+        return this.leaves(shot);
+      case "zap":
+        return this.zap(shot);
+      case "rocks":
+        return this.rocks(shot);
+      case "tackle":
+        // A tackle is the critter itself running in; the battle moves it.
+        shot.onImpact(0);
+        return Promise.resolve();
+    }
+  }
+
+  /** Powering up for a super move: a ring and a fountain of sparks. */
+  async aura(at: THREE.Vector3, colours: ReadonlyArray<number>): Promise<void> {
+    this.sounds.play("charge");
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(1, 0.06, 8, 40),
+      new THREE.MeshBasicMaterial({
+        color: colours[0],
+        transparent: true,
+        depthWrite: false,
+      }),
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.copy(at).setY(0.08);
+    this.stage.scene.add(ring);
+    const p = new THREE.Vector3();
+    await this.clock.tween(
+      0.8,
+      t => {
+        ring.scale.setScalar(0.4 + t * 1.2);
+        (ring.material as THREE.MeshBasicMaterial).opacity = 1 - t * t;
+        const a = Math.random() * Math.PI * 2;
+        p.set(at.x + Math.cos(a) * 0.7, 0.1, at.z + Math.sin(a) * 0.7);
+        this.stage.sparks.burst(p, {
+          color: colours,
+          count: 3,
+          speed: 0.3,
+          lift: 3.2,
+          gravity: 0.5,
+          ttl: 0.7,
+          size: 1.2,
+        });
+      },
+      Ease.linear,
+    );
+    this.stage.scene.remove(ring);
+    ring.geometry.dispose();
+    (ring.material as THREE.Material).dispose();
+  }
+
+  /** Throws `count` pieces one after another and waits for them all. */
+  private async volley(v: Volley): Promise<void> {
+    const flights: Array<Promise<void>> = [];
+    for (let i = 0; i < v.count; i++) {
+      flights.push(this.fly(v, i));
+      if (i < v.count - 1) {
+        await this.clock.wait(v.stagger);
+      }
+    }
+    await Promise.all(flights);
+  }
+
+  private async fly(v: Volley, i: number): Promise<void> {
+    const piece = v.make(i);
+    this.stage.scene.add(piece);
+    let last = 0;
+    await this.clock.tween(
+      v.flight,
+      t => {
+        v.path(t, i, piece.position);
+        v.frame?.(piece, t, (t - last) * v.flight);
+        last = t;
+      },
+      Ease.linear,
+    );
+    this.stage.scene.remove(piece);
+    v.land(piece.position.clone(), i);
+  }
+
+  private shakeIfBig(shot: Shot): void {
+    if (shot.big) {
+      this.stage.shake();
+    }
+  }
+
+  private fireball(shot: Shot): Promise<void> {
+    const big = shot.big;
+    const s = big ? EFFECTS.superScale : 1;
+    const count = big ? 5 : 1;
+    // A super move's fireballs land around the target, not all on one spot.
+    const ends = Array.from({length: count}, (_, i) =>
+      i === 0
+        ? shot.to.clone()
+        : shot.to.clone().add(new THREE.Vector3(spread(0.6), 0, spread(0.6))),
+    );
+    this.sounds.play("fire");
+    return this.volley({
+      count,
+      flight: EFFECTS.flight,
+      stagger: EFFECTS.stagger * 2,
+      make: () => {
+        const g = new THREE.Group();
+        g.add(new THREE.Mesh(sphere, fireCore));
+        const shell = new THREE.Mesh(sphere, fireShell);
+        shell.scale.setScalar(1.4);
+        g.add(shell);
+        g.scale.setScalar(0.22 * s);
+        return g;
+      },
+      path: (t, i, out) => {
+        out.lerpVectors(shot.from, ends[i], t);
+        out.y += Math.sin(Math.PI * t) * (big ? 1.4 : 0.8);
+      },
+      frame: piece => {
+        piece.rotation.y += 0.3;
+        this.stage.sparks.burst(piece.position, {
+          color: FIRE,
+          count: big ? 3 : 2,
+          speed: 0.4,
+          lift: 0.4,
+          gravity: -1.5,
+          ttl: 0.35,
+          size: s,
+        });
+      },
+      land: (at, i) => {
+        this.stage.sparks.burst(at, {
+          color: FIRE,
+          count: big ? 40 : 30,
+          speed: 3.2 * s,
+          lift: 1.5,
+          gravity: 2,
+          ttl: 0.6,
+          size: 1.3 * s,
+          spherical: 0.8,
+        });
+        this.sounds.play(big ? "superHit" : "hit");
+        this.shakeIfBig(shot);
+        shot.onImpact(i);
+      },
+    });
+  }
+
+  private bubbles(shot: Shot): Promise<void> {
+    const big = shot.big;
+    const s = big ? EFFECTS.superScale : 1;
+    const count = big ? 16 : 6;
+    const side = new THREE.Vector3()
+      .subVectors(shot.to, shot.from)
+      .cross(up)
+      .normalize();
+    const phase = Array.from({length: count}, () => Math.random() * 6.3);
+    this.sounds.play("bubble");
+    return this.volley({
+      count,
+      flight: EFFECTS.flight * 1.1,
+      stagger: EFFECTS.stagger * (big ? 0.6 : 1),
+      make: () => {
+        const g = new THREE.Group();
+        g.add(new THREE.Mesh(sphere, bubbleMat));
+        const shine = new THREE.Mesh(sphere, shineMat);
+        shine.scale.setScalar(0.22);
+        shine.position.set(0.4, 0.45, 0.5);
+        g.add(shine);
+        g.scale.setScalar((0.13 + Math.random() * 0.09) * s);
+        return g;
+      },
+      path: (t, i, out) => {
+        out.lerpVectors(shot.from, shot.to, t);
+        const wob = Math.sin(t * 9 + phase[i]) * 0.25 * (1 - t);
+        out.addScaledVector(side, wob);
+        out.y += Math.sin(t * 7 + phase[i]) * 0.15 + (big ? t * 0.4 : 0);
+      },
+      land: (at, i) => {
+        this.stage.sparks.burst(at, {
+          color: WATER,
+          count: 10,
+          speed: 1.8 * s,
+          lift: 2.2,
+          gravity: 6,
+          ttl: 0.5,
+          size: s,
+          spherical: 0.5,
+        });
+        if (i % 3 === 0) {
+          this.sounds.play("tap");
+        }
+        if (i === count - 1) {
+          this.sounds.play(big ? "superHit" : "hit");
+          this.shakeIfBig(shot);
+        }
+        shot.onImpact(i);
+      },
+    });
+  }
+
+  private leaves(shot: Shot): Promise<void> {
+    const big = shot.big;
+    const s = big ? EFFECTS.superScale : 1;
+    const count = big ? 22 : 8;
+    const dir = new THREE.Vector3().subVectors(shot.to, shot.from).normalize();
+    const side = new THREE.Vector3().crossVectors(dir, up).normalize();
+    const lift = new THREE.Vector3().crossVectors(side, dir).normalize();
+    this.sounds.play("leaf");
+    return this.volley({
+      count,
+      flight: EFFECTS.flight * 1.3,
+      stagger: EFFECTS.stagger * (big ? 0.5 : 0.8),
+      make: i => {
+        const petal = big && i % 2 === 1;
+        const m = new THREE.Mesh(petal ? petalGeo : leafGeo, toon);
+        m.scale.set(0.17 * s, 0.035 * s, 0.09 * s);
+        m.rotation.set(Math.random() * 6, Math.random() * 6, 0);
+        return m;
+      },
+      path: (t, i, out) => {
+        // A corkscrew down the line between them, tightening as it lands.
+        const a = t * Math.PI * 4 + i * 1.3;
+        const r = 0.55 * (1 - t) * s;
+        out.lerpVectors(shot.from, shot.to, t);
+        out.addScaledVector(side, Math.cos(a) * r);
+        out.addScaledVector(lift, Math.sin(a) * r);
+      },
+      frame: (piece, _t, dt) => {
+        piece.rotation.x += dt * 9;
+        piece.rotation.z += dt * 6;
+      },
+      land: (at, i) => {
+        this.stage.sparks.burst(at, {
+          color: big && i % 2 ? PETAL : LEAF,
+          count: 5,
+          speed: 1.5,
+          lift: 1.2,
+          gravity: 3,
+          ttl: 0.5,
+          size: s,
+        });
+        if (i === count - 1) {
+          this.sounds.play(big ? "superHit" : "hit");
+          this.shakeIfBig(shot);
+        }
+        shot.onImpact(i);
+      },
+    });
+  }
+
+  /** Lightning out of the sky onto the target, crackling as it goes. */
+  private async zap(shot: Shot): Promise<void> {
+    const big = shot.big;
+    const count = big ? 4 : 1;
+    // Sparks gather on the attacker first, so it is clear who did it.
+    await this.clock.tween(
+      0.4,
+      () => {
+        this.stage.sparks.burst(shot.from, {
+          color: SPARK,
+          count: 2,
+          speed: 1.4,
+          lift: 0.3,
+          gravity: 0,
+          ttl: 0.25,
+          spherical: 1,
+        });
+      },
+      Ease.linear,
+    );
+    for (let i = 0; i < count; i++) {
+      const at = shot.to
+        .clone()
+        .add(
+          i === 0
+            ? new THREE.Vector3()
+            : new THREE.Vector3(spread(0.5), 0, spread(0.5)),
+        );
+      const bolt = this.bolt(at, big ? 1.5 : 1);
+      this.stage.scene.add(bolt);
+      this.sounds.play("zap");
+      this.stage.sparks.burst(at, {
+        color: SPARK,
+        count: 36,
+        speed: 3.5,
+        lift: 1.2,
+        gravity: 3,
+        ttl: 0.55,
+        size: 1.3,
+        spherical: 0.8,
+      });
+      this.sounds.play(big ? "superHit" : "hit");
+      this.shakeIfBig(shot);
+      shot.onImpact(i);
+      // A flicker or two, the way lightning does.
+      await this.clock.tween(
+        0.32,
+        t => {
+          bolt.visible = Math.floor(t * 7) % 2 === 0;
+        },
+        Ease.linear,
+      );
+      this.stage.scene.remove(bolt);
+      bolt.traverse(o => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+        }
+      });
+      if (i < count - 1) {
+        await this.clock.wait(0.12);
+      }
+    }
+  }
+
+  private bolt(at: THREE.Vector3, width: number): THREE.Group {
+    const points: Array<THREE.Vector3> = [];
+    const top = 7;
+    const steps = 9;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const jag = i === 0 || i === steps ? 0 : 0.45;
+      points.push(
+        new THREE.Vector3(
+          at.x + spread(jag),
+          lerp(top, at.y, t),
+          at.z + spread(jag),
+        ),
+      );
+    }
+    const core: Array<THREE.BufferGeometry> = [];
+    const glow: Array<THREE.BufferGeometry> = [];
+    const q = new THREE.Quaternion();
+    for (let i = 0; i < steps; i++) {
+      const a = points[i];
+      const b = points[i + 1];
+      const d = new THREE.Vector3().subVectors(b, a);
+      const len = d.length();
+      q.setFromUnitVectors(up, d.normalize());
+      const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
+      for (const [list, r] of [
+        [core, 0.05 * width],
+        [glow, 0.14 * width],
+      ] as const) {
+        const g = new THREE.CylinderGeometry(r, r, len + r, 6, 1, true);
+        g.applyQuaternion(q);
+        g.translate(mid.x, mid.y, mid.z);
+        list.push(g);
+      }
+    }
+    const group = new THREE.Group();
+    const merge = (list: Array<THREE.BufferGeometry>) => {
+      const m = mergeGeometries(list);
+      list.forEach(g => g.dispose());
+      return m ?? new THREE.BufferGeometry();
+    };
+    group.add(new THREE.Mesh(merge(core), boltMat));
+    group.add(new THREE.Mesh(merge(glow), boltGlow));
+    return group;
+  }
+
+  private rocks(shot: Shot): Promise<void> {
+    const big = shot.big;
+    const s = big ? EFFECTS.superScale : 1;
+    const count = big ? 9 : 3;
+    const starts = Array.from({length: count}, () =>
+      shot.to
+        .clone()
+        .add(
+          new THREE.Vector3(spread(1.2), 5 + Math.random() * 2, spread(1.2)),
+        ),
+    );
+    const ends = Array.from({length: count}, (_, i) =>
+      shot.to
+        .clone()
+        .add(
+          new THREE.Vector3(
+            i === 0 ? 0 : spread(0.5),
+            0.1,
+            i === 0 ? 0 : spread(0.5),
+          ),
+        ),
+    );
+    const spin = Array.from({length: count}, () => [
+      spread(8),
+      spread(8),
+      spread(8),
+    ]);
+    this.sounds.play("whoosh");
+    return this.volley({
+      count,
+      flight: EFFECTS.flight * 0.9,
+      stagger: EFFECTS.stagger * 1.6,
+      make: i => {
+        const m = new THREE.Mesh(rockGeo[i % rockGeo.length], toon);
+        m.scale.setScalar((0.22 + Math.random() * 0.1) * s);
+        return m;
+      },
+      path: (t, i, out) => {
+        // Falling, so it speeds up as it comes: t² on the way down.
+        out.lerpVectors(starts[i], ends[i], t * t);
+      },
+      frame: (piece, _t, dt) => {
+        const i = piece.id % count;
+        piece.rotation.x += spin[i][0] * dt;
+        piece.rotation.y += spin[i][1] * dt;
+        piece.rotation.z += spin[i][2] * dt;
+      },
+      land: (at, i) => {
+        this.stage.sparks.burst(at, {
+          color: DUST,
+          count: 22,
+          speed: 2.4 * s,
+          lift: 1.4,
+          gravity: 4,
+          ttl: 0.6,
+          size: 1.4 * s,
+          spherical: 0.4,
+        });
+        this.sounds.play("rock");
+        if (big) {
+          this.stage.shake(0.12, 0.3);
+        }
+        shot.onImpact(i);
+      },
+    });
+  }
+}
