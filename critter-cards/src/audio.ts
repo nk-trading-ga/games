@@ -19,7 +19,8 @@ export type SoundName =
   | "charge"
   | "faint"
   | "win"
-  | "lose";
+  | "lose"
+  | "thunder";
 
 export class Sounds {
   private ctx?: AudioContext;
@@ -160,6 +161,12 @@ export class Sounds {
         break;
       case "faint":
         this.tone(600, 0.8, "sine", 0.25, 150);
+        break;
+      case "thunder":
+        // A crack, then a long low rumble rolling away.
+        this.noise(0.25, 0.35, 2500);
+        this.noise(2.2, 0.45, 220, 0.08);
+        this.tone(55, 1.8, "sine", 0.2, 30, 0.1);
         break;
       case "win":
         [523, 659, 784, 1047].forEach((f, i) => {

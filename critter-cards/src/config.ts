@@ -110,3 +110,36 @@ export const EFFECTS = {
   /** How much bigger everything is in a super move. */
   superScale: 1.6,
 };
+
+export const CITY = {
+  /**
+   * The street, far below. The arena is on the roof of a skyscraper, so the
+   * rest of the city's towers rise from down here and only their tops come up
+   * round it — which leaves the sky, its clouds and its lightning in view.
+   */
+  streetLevel: -14,
+  /** Buildings stand in a ring between these distances from the middle. */
+  innerRadius: 11,
+  outerRadius: 36,
+  buildings: 72,
+  /** How tall a building can be, lowest to highest, from the street. */
+  minHeight: 11,
+  maxHeight: 24,
+  /** Of the windows on a building, how many have a light on. */
+  litWindows: 0.45,
+};
+
+export const STORM = {
+  /** Seconds between flashes of lightning over the city, as [least, most]. */
+  gap: [3.5, 8] as const,
+  /** How long the whole scene stays lit up by a flash. */
+  flash: 0.35,
+  /**
+   * The thunder comes after the flash, the way it does when the storm is a
+   * little way off.
+   */
+  thunderDelay: 0.5,
+  /** Raindrops, and how fast they fall in units a second. */
+  drops: 700,
+  rainSpeed: 22,
+};

@@ -30,6 +30,7 @@ class Game {
     this.sounds.setMuted(this.data.muted);
     this.stage = new Stage(mount);
     this.art = drawAllCards();
+    this.stage.onThunder = () => this.sounds.play("thunder");
     this.ui = new UI(mount, this.art, this.sounds, this.data.muted, muted => {
       this.sounds.setMuted(muted);
       this.data.muted = muted;

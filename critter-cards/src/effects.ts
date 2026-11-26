@@ -107,6 +107,61 @@ const toon = toonMaterial();
 
 const spread = (k: number) => (Math.random() * 2 - 1) * k;
 
+/**
+ * A bolt of lightning from `start` to `end`: a jagged line of thin tubes, a
+ * yellow core inside a soft white glow. Used by the zap moves and by the storm
+ * over the city.
+ */
+export function makeBolt(
+  start: THREE.Vector3,
+  end: THREE.Vector3,
+  width: number,
+  jag = 0.45,
+): THREE.Group {
+  const points: Array<THREE.Vector3> = [];
+  const steps = 9;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const j = i === 0 || i === steps ? 0 : jag;
+    points.push(
+      new THREE.Vector3(
+        lerp(start.x, end.x, t) + spread(j),
+        lerp(start.y, end.y, t),
+        lerp(start.z, end.z, t) + spread(j),
+      ),
+    );
+  }
+  const core: Array<THREE.BufferGeometry> = [];
+  const glow: Array<THREE.BufferGeometry> = [];
+  const q = new THREE.Quaternion();
+  for (let i = 0; i < steps; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const d = new THREE.Vector3().subVectors(b, a);
+    const len = d.length();
+    q.setFromUnitVectors(up, d.normalize());
+    const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
+    for (const [list, r] of [
+      [core, 0.05 * width],
+      [glow, 0.14 * width],
+    ] as const) {
+      const g = new THREE.CylinderGeometry(r, r, len + r, 6, 1, true);
+      g.applyQuaternion(q);
+      g.translate(mid.x, mid.y, mid.z);
+      list.push(g);
+    }
+  }
+  const group = new THREE.Group();
+  const merge = (list: Array<THREE.BufferGeometry>) => {
+    const m = mergeGeometries(list);
+    list.forEach(g => g.dispose());
+    return m ?? new THREE.BufferGeometry();
+  };
+  group.add(new THREE.Mesh(merge(core), boltMat));
+  group.add(new THREE.Mesh(merge(glow), boltGlow));
+  return group;
+}
+
 export class Effects {
   constructor(
     private readonly stage: Stage,
@@ -478,7 +533,11 @@ export class Effects {
             ? new THREE.Vector3()
             : new THREE.Vector3(spread(0.5), 0, spread(0.5)),
         );
-      const bolt = this.bolt(at, big ? 2.2 : 1.5);
+      const bolt = makeBolt(
+        new THREE.Vector3(at.x + spread(0.4), 7, at.z + spread(0.4)),
+        at,
+        big ? 2.2 : 1.5,
+      );
       this.shockwave(at, 0xfff27a, big ? 1.4 : 1);
       this.stage.scene.add(bolt);
       this.sounds.play("zap");
@@ -513,52 +572,6 @@ export class Effects {
         await this.clock.wait(0.12);
       }
     }
-  }
-
-  private bolt(at: THREE.Vector3, width: number): THREE.Group {
-    const points: Array<THREE.Vector3> = [];
-    const top = 7;
-    const steps = 9;
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const jag = i === 0 || i === steps ? 0 : 0.45;
-      points.push(
-        new THREE.Vector3(
-          at.x + spread(jag),
-          lerp(top, at.y, t),
-          at.z + spread(jag),
-        ),
-      );
-    }
-    const core: Array<THREE.BufferGeometry> = [];
-    const glow: Array<THREE.BufferGeometry> = [];
-    const q = new THREE.Quaternion();
-    for (let i = 0; i < steps; i++) {
-      const a = points[i];
-      const b = points[i + 1];
-      const d = new THREE.Vector3().subVectors(b, a);
-      const len = d.length();
-      q.setFromUnitVectors(up, d.normalize());
-      const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
-      for (const [list, r] of [
-        [core, 0.05 * width],
-        [glow, 0.14 * width],
-      ] as const) {
-        const g = new THREE.CylinderGeometry(r, r, len + r, 6, 1, true);
-        g.applyQuaternion(q);
-        g.translate(mid.x, mid.y, mid.z);
-        list.push(g);
-      }
-    }
-    const group = new THREE.Group();
-    const merge = (list: Array<THREE.BufferGeometry>) => {
-      const m = mergeGeometries(list);
-      list.forEach(g => g.dispose());
-      return m ?? new THREE.BufferGeometry();
-    };
-    group.add(new THREE.Mesh(merge(core), boltMat));
-    group.add(new THREE.Mesh(merge(glow), boltGlow));
-    return group;
   }
 
   private rocks(shot: Shot): Promise<void> {

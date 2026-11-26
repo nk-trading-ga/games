@@ -38,6 +38,11 @@ claws, horns and spikes — and to hit hard: every hit shakes the screen and
 blasts a shockwave across the floor, and a bump rips red claw marks across the
 other beast. Nothing is gory, and losing is still gentle.
 
+The fights happen in a **darkness world**: a stone arena on the roof of a
+skyscraper in a city at night, black towers with windows lit here and there,
+neon rings on the floor, rain, low storm clouds, and lightning striking the
+towers every few seconds — the whole scene flashes, then the thunder comes.
+
 A special or super move that is strong against the other critter's kind is a
 **Super hit!** for half as much again. Who beats whom is `STRONG_AGAINST` in
 `src/critters.ts`.
@@ -64,7 +69,7 @@ src/
   critters.ts  the five critters, their moves, and who is strong against whom
   models.ts    each critter built from painted primitives, toon-shaded, outlined
   cards.ts     card art drawn on a canvas, with a portrait rendered from the model
-  stage.ts     renderer, the meadow, camera, particle pools
+  stage.ts     renderer, the darkness city and its storm, camera, particles
   battle.ts    one battle as a script: summon, turns, hits, faint
   effects.ts   fireballs, bubbles, leaves, lightning, falling rocks
   anim.ts      a clock whose waits and tweens are promises
