@@ -1,6 +1,7 @@
 import {
   CRITTERS,
   EXTRA,
+  PATTERN,
   SPECIES,
   atForm,
   rarityOf,
@@ -28,6 +29,13 @@ const BODIES: ReadonlyArray<Body> = [
   "giant",
   "scorpion",
   "golem",
+  "dragon",
+  "serpent",
+  "raptor",
+  "spider",
+  "turtle",
+  "ape",
+  "squid",
 ];
 
 /** First halves of names, by kind: for the first form, then the evolved one. */
@@ -61,6 +69,13 @@ const SUFFIX: Record<Body, Array<string>> = {
   giant: ["king", "brute", "horn", "hulk", "stomp", "beast", "back"],
   scorpion: ["sting", "tail", "pincer", "crawler", "scuttle", "needle"],
   golem: ["titan", "fist", "crusher", "golem", "hammer", "guard", "slab"],
+  dragon: ["drake", "wyrm", "wing", "scale", "talon", "dragon"],
+  serpent: ["viper", "coil", "hiss", "serpent", "slither", "cobra"],
+  raptor: ["raptor", "rex", "dash", "stalker", "sickle", "runner"],
+  spider: ["web", "spinner", "weaver", "creep", "widow", "legs"],
+  turtle: ["shell", "plate", "dome", "fort", "bulwark", "tortoise"],
+  ape: ["ape", "grip", "pound", "roar", "knuckle", "rage"],
+  squid: ["squid", "tendril", "ink", "sucker", "grasp", "beak"],
 };
 
 /** Body colours to choose from, by kind, and accents to go with them. */
@@ -113,6 +128,41 @@ const BUMP: Record<Body, Array<[string, string]>> = {
     ["Body Slam", "💥"],
     ["Rock Fist", "👊"],
   ],
+  dragon: [
+    ["Tail Swipe", "💥"],
+    ["Dragon Bite", "🦷"],
+    ["Wing Slam", "💥"],
+  ],
+  serpent: [
+    ["Viper Strike", "🦷"],
+    ["Squeeze", "💥"],
+    ["Tail Slap", "💥"],
+  ],
+  raptor: [
+    ["Sickle Slash", "💥"],
+    ["Raptor Pounce", "💥"],
+    ["Snap", "🦷"],
+  ],
+  spider: [
+    ["Web Bite", "🦷"],
+    ["Leg Stab", "💥"],
+    ["Pounce", "💥"],
+  ],
+  turtle: [
+    ["Shell Bash", "💥"],
+    ["Snap", "🦷"],
+    ["Headbutt", "💥"],
+  ],
+  ape: [
+    ["Ground Pound", "👊"],
+    ["Big Punch", "👊"],
+    ["Chest Slam", "💥"],
+  ],
+  squid: [
+    ["Tentacle Slap", "💥"],
+    ["Squeeze", "💥"],
+    ["Ink Splat", "💥"],
+  ],
 };
 
 const SPECIAL: Record<Kind, {effect: Move["effect"]; icon: string}> = {
@@ -152,6 +202,13 @@ const SHAPE: Record<Body, string> = {
   giant: "A hulking giant on two legs",
   scorpion: "A scuttling scorpion with a deadly tail",
   golem: "A living mountain of stone",
+  dragon: "A winged dragon with a long neck",
+  serpent: "A giant hooded snake",
+  raptor: "A fast dinosaur with a sickle claw",
+  spider: "An eight-legged spider as big as a car",
+  turtle: "A tortoise with a shell like a fortress",
+  ape: "A huge ape with fists like boulders",
+  squid: "A squid that walks on its tentacles",
 };
 
 const NATURE: Record<Kind, string> = {
@@ -190,6 +247,13 @@ const SIZE: Record<Body, [number, number]> = {
   giant: [2.3, 600],
   scorpion: [1.0, 90],
   golem: [2.5, 1400],
+  dragon: [2.2, 520],
+  serpent: [1.8, 150],
+  raptor: [1.7, 160],
+  spider: [1.1, 120],
+  turtle: [1.2, 700],
+  ape: [2.0, 450],
+  squid: [2.1, 260],
 };
 
 const darken = (c: number, k: number) => mix(c, 0x0a0812, k);
@@ -218,6 +282,15 @@ function look(kind: Kind, body: number, form: number): Look {
     eye: form === 0 ? pick([0xffe14a, 0xff3b3b, 0xff6a1f]) : accent,
     belly: mix(body, 0xffffff, 0.45),
   };
+}
+
+/** Plain four times in ten; otherwise stripes, spots or a dark back. */
+function patternFor(): number {
+  const r = rng();
+  if (r < 0.4) {
+    return PATTERN.plain;
+  }
+  return r < 0.6 ? PATTERN.stripes : r < 0.8 ? PATTERN.spots : PATTERN.saddle;
 }
 
 function randomExtras(chance: number): number {
@@ -299,6 +372,7 @@ function makeSpecies(index: number, used: Set<string>): Critter {
     body,
     look: looks[0],
     extras,
+    pattern: patternFor(),
     shape: {wide: 0.88 + rng() * 0.27, tall: 0.9 + rng() * 0.22},
     tier,
     height: Math.round(height * size * 10) / 10,
@@ -341,6 +415,7 @@ function makeKing(index: number): Critter {
     ...king,
     look: kingLook,
     extras: king.extras ?? 0,
+    pattern: PATTERN.saddle,
     kind: "spark",
     body: "giant",
     shape: {wide: 1.15, tall: 1.1},

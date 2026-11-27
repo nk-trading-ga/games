@@ -17,9 +17,7 @@ site/dist/
   styles.css
   manifest.webmanifest
   sw.js               offline cache
-  chofter-logo-<hash>.png
   icons/              the Chofter mark, at every size the install needs
-  apps/               App Store icons, content-hashed
   games/
     bee/
       index.html      the game
@@ -84,7 +82,7 @@ Its cache name carries the build timestamp, so each deploy replaces the old one.
 Pictures are most of what this site weighs and almost never what changes, so
 they don't live in the per-build cache at all. Every image gets a content hash
 in its filename — Vite does it for a game's own assets, `stampAsset` does it
-for the gallery's cards, logo and App Store icons — and anything named that way
+for the gallery's cards — and anything named that way
 is kept in `chofter-assets`, a cache with no build stamp on it that a deploy
 never bins.
 
@@ -173,15 +171,11 @@ Other scripts:
 | `npm --prefix site run build:site` | Gallery only — fast, for tweaking the design |
 | `npm --prefix site run serve`      | Preview `site/dist` at http://localhost:4173 |
 
-## Games that aren't in this repo
+## The gallery's name
 
-Native apps are listed by hand in `APP_STORE` at the top of `build.mjs` — name,
-App Store id, and an icon in `site/assets/apps/`. They render in their own
-section under the playable games, as links out rather than cards you can press
-play on.
-
-The links are built as `apps.apple.com/app/id<id>`, without Apple's `/ie/`
-storefront segment: with it, every visitor lands in the Irish store.
+It is called **Liam K Games** — `APP.name` at the top of `build.mjs`, which is
+the page title, the heading, and the name an installed copy has on the home
+screen. It used to list some native App Store apps too; that section is gone.
 
 ## How a folder becomes a game
 

@@ -1,7 +1,15 @@
 import * as THREE from "three";
-import {mergeGeometries} from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import {FORM_SCALE} from "./config";
-import {EXTRA, type Body, type Critter} from "./critters";
+import {EXTRA, PATTERN, type Body, type Critter} from "./critters";
+import {
+  FANG,
+  MOUTH,
+  OUTLINE_COLOUR,
+  OUTLINE_WIDTH,
+  Parts,
+  type V3,
+} from "./parts";
+import {NEW_ANCHORS, NEW_BUILDERS, type Anchors} from "./bodies";
 
 // Every critter is built here out of spheres, cones and cylinders, each painted
 // one colour, then merged into one geometry: one draw call per critter, plus
@@ -9,132 +17,6 @@ import {EXTRA, type Body, type Critter} from "./critters";
 //
 // They are meant to look fearsome: glowing slit eyes under a scowl, fangs,
 // claws, horns and spikes. Big and heavy, not round and cuddly.
-
-type V3 = readonly [number, number, number];
-
-const OUTLINE_COLOUR = 0x1a1210;
-/** How far the outline shell is pushed out along the normals, in units. */
-const OUTLINE_WIDTH = 0.026;
-
-const FANG = 0xfff6e0;
-const PUPIL = 0x120c0a;
-const MOUTH = 0x4a0f14;
-
-/** Collects painted parts and merges them into one geometry. */
-export class Parts {
-  private readonly geos: Array<THREE.BufferGeometry> = [];
-  private readonly m = new THREE.Matrix4();
-  private readonly q = new THREE.Quaternion();
-  private readonly e = new THREE.Euler();
-
-  add(
-    source: THREE.BufferGeometry,
-    colour: number,
-    at: V3,
-    scale: V3 = [1, 1, 1],
-    rot: V3 = [0, 0, 0],
-  ): void {
-    // Merging needs every part to agree on indexing and attributes, so each is
-    // made non-indexed and keeps only position, normal and its paint.
-    const g = source.index ? source.toNonIndexed() : source.clone();
-    source.dispose();
-    g.deleteAttribute("uv");
-    this.e.set(rot[0], rot[1], rot[2]);
-    this.q.setFromEuler(this.e);
-    this.m.compose(
-      new THREE.Vector3(...at),
-      this.q,
-      new THREE.Vector3(...scale),
-    );
-    g.applyMatrix4(this.m);
-    const c = new THREE.Color(colour);
-    const n = g.attributes.position.count;
-    const paint = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
-      paint[i * 3] = c.r;
-      paint[i * 3 + 1] = c.g;
-      paint[i * 3 + 2] = c.b;
-    }
-    g.setAttribute("color", new THREE.BufferAttribute(paint, 3));
-    this.geos.push(g);
-  }
-
-  ball(colour: number, at: V3, scale: V3 | number = 1, rot?: V3): void {
-    const s: V3 = typeof scale === "number" ? [scale, scale, scale] : scale;
-    this.add(new THREE.SphereGeometry(1, 20, 14), colour, at, s, rot);
-  }
-
-  /** A rough lump: a faceted ball, which reads as rock or armour. */
-  lump(colour: number, at: V3, scale: V3 | number = 1, rot?: V3): void {
-    const s: V3 = typeof scale === "number" ? [scale, scale, scale] : scale;
-    this.add(new THREE.IcosahedronGeometry(1, 0), colour, at, s, rot);
-  }
-
-  cone(colour: number, at: V3, r: number, h: number, rot?: V3): void {
-    this.add(new THREE.ConeGeometry(r, h, 12), colour, at, [1, 1, 1], rot);
-  }
-
-  rod(colour: number, at: V3, r: number, h: number, rot?: V3): void {
-    this.add(
-      new THREE.CylinderGeometry(r, r * 0.85, h, 10),
-      colour,
-      at,
-      [1, 1, 1],
-      rot,
-    );
-  }
-
-  /**
-   * A glowing eye with a slit pupil, and a heavy brow slanting down toward
-   * the nose — the scowl is most of what makes a face look fierce. `side` is
-   * -1 for the left eye and 1 for the right.
-   */
-  eye(at: V3, r: number, glow: number, brow: number, side: number): void {
-    this.ball(glow, at, [r, r * 0.72, r * 0.6]);
-    this.ball(
-      PUPIL,
-      [at[0], at[1], at[2] + r * 0.4],
-      [r * 0.22, r * 0.62, r * 0.3],
-    );
-    this.add(
-      new THREE.BoxGeometry(r * 2.6, r * 0.55, r * 0.9),
-      brow,
-      [at[0] + side * r * 0.1, at[1] + r * 0.75, at[2] + r * 0.15],
-      [1, 1, 1],
-      [0, 0, side * 0.45],
-    );
-  }
-
-  /** A fang, pointing down from the top jaw (or up, with `up`). */
-  fang(at: V3, r: number, h: number, up = false): void {
-    this.cone(FANG, at, r, h, up ? [0, 0, 0] : [Math.PI, 0, 0]);
-  }
-
-  /** Three claws poking forward out of a foot or a fist. */
-  claws(at: V3, size: number, tilt = 0): void {
-    for (const dx of [-1, 0, 1]) {
-      this.cone(
-        FANG,
-        [at[0] + dx * size * 0.7, at[1], at[2]],
-        size * 0.35,
-        size * 1.1,
-        [Math.PI / 2 + tilt, 0, 0],
-      );
-    }
-  }
-
-  build(): THREE.BufferGeometry {
-    const merged = mergeGeometries(this.geos);
-    if (!merged) {
-      throw new Error("critter parts did not merge");
-    }
-    for (const g of this.geos) {
-      g.dispose();
-    }
-    merged.computeBoundingSphere();
-    return merged;
-  }
-}
 
 // Each builder makes all three forms of its beast. The evolved form (form 1)
 // adds to the first — more horns, more spikes, armour — and the Mega form
@@ -641,16 +523,15 @@ const BUILDERS: Record<Body, (p: Parts, c: Critter) => void> = {
   giant: thornclaw,
   scorpion: voltsting,
   golem: rockjaw,
+  ...NEW_BUILDERS,
 };
 
 /**
  * Where on each body plan the extra parts go: the top of its head, where
  * horns sprout, a line down its back, and its shoulders.
  */
-const ANCHORS: Record<
-  Body,
-  {head: V3; horn: V3; back: Array<V3>; shoulder: V3; chest: V3}
-> = {
+const ANCHORS: Record<Body, Anchors> = {
+  ...NEW_ANCHORS,
   wolf: {
     head: [0, 1.48, 0.6],
     horn: [0.15, 1.42, 0.66],
@@ -662,6 +543,9 @@ const ANCHORS: Record<
     ],
     shoulder: [0.36, 1.12, 0.3],
     chest: [0, 0.95, 0.78],
+    mouth: [0, 0.98, 1.05],
+    brow: [0, 1.3, 0.92],
+    torso: {c: [0, 0.74, -0.05], r: [0.42, 0.42, 0.72]},
   },
   shark: {
     head: [0, 1.2, 0.75],
@@ -674,6 +558,9 @@ const ANCHORS: Record<
     ],
     shoulder: [0.4, 1.02, 0.2],
     chest: [0, 0.7, 0.75],
+    mouth: [0, 0.72, 1.0],
+    brow: [0, 1.06, 0.95],
+    torso: {c: [0, 0.76, -0.05], r: [0.46, 0.45, 0.85]},
   },
   giant: {
     head: [0, 1.84, 0.15],
@@ -686,6 +573,9 @@ const ANCHORS: Record<
     ],
     shoulder: [0.44, 1.32, 0],
     chest: [0, 1.08, 0.45],
+    mouth: [0, 1.4, 0.48],
+    brow: [0, 1.66, 0.43],
+    torso: {c: [0, 0.96, 0], r: [0.52, 0.56, 0.43]},
   },
   scorpion: {
     head: [0, 0.72, 0.55],
@@ -698,6 +588,9 @@ const ANCHORS: Record<
     ],
     shoulder: [0.3, 0.74, 0.12],
     chest: [0, 0.45, 0.7],
+    mouth: [0, 0.42, 0.76],
+    brow: [0, 0.68, 0.75],
+    torso: {c: [0, 0.5, 0], r: [0.43, 0.3, 0.56]},
   },
   golem: {
     head: [0, 1.74, 0.15],
@@ -710,6 +603,9 @@ const ANCHORS: Record<
     ],
     shoulder: [0.66, 1.3, 0],
     chest: [0, 1.0, 0.52],
+    mouth: [0, 1.33, 0.45],
+    brow: [0, 1.62, 0.45],
+    torso: {c: [0, 0.86, 0], r: [0.63, 0.54, 0.51]},
   },
 };
 
@@ -779,6 +675,15 @@ function addExtras(p: Parts, c: Critter): void {
         0,
         -s * 0.5,
       ]);
+    }
+  }
+  if (x & EXTRA.thirdEye) {
+    p.eye(a.brow, 0.05, L.eye, L.dark, 1);
+  }
+  if (x & EXTRA.tusks) {
+    for (const s of [-1, 1]) {
+      const [mx, my, mz] = a.mouth;
+      p.fang([mx + s * 0.12, my - 0.02, mz - 0.04], 0.035, 0.22, true);
     }
   }
   if (x & EXTRA.gem) {
@@ -854,9 +759,70 @@ export interface CritterModel {
   material: THREE.MeshToonMaterial;
 }
 
+/** A number from 0 to 1 that is always the same for this beast and `k`. */
+function hashed(c: Critter, k: number): number {
+  const x = Math.sin(c.index * 12.9898 + k * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/** Stripes, spots or a dark saddle, laid over the body's main ellipsoid. */
+function addPattern(p: Parts, c: Critter): void {
+  if (!c.pattern || !c.look) {
+    return;
+  }
+  const L = c.look;
+  const {
+    c: [cx, cy, cz],
+    r: [rx, ry, rz],
+  } = ANCHORS[c.body].torso;
+  if (c.pattern === PATTERN.stripes) {
+    // Rings round the body, across its longest way: front to back for one
+    // lying down, top to bottom for one standing up.
+    const upright = ry > rz;
+    for (const f of [-0.5, -0.1, 0.3]) {
+      const k = Math.sqrt(1 - f * f) * 1.02;
+      if (upright) {
+        p.add(
+          new THREE.TorusGeometry(1, 0.1, 6, 32),
+          L.dark,
+          [cx, cy + f * ry, cz],
+          [rx * k, rz * k, 0.5],
+          [Math.PI / 2, 0, 0],
+        );
+      } else {
+        p.add(
+          new THREE.TorusGeometry(1, 0.1, 6, 32),
+          L.dark,
+          [cx, cy, cz + f * rz],
+          [rx * k, ry * k, 0.5],
+        );
+      }
+    }
+  } else if (c.pattern === PATTERN.spots) {
+    for (let i = 0; i < 7; i++) {
+      // Over the top half, each spot sunk most of the way in.
+      const a = hashed(c, i) * Math.PI * 2;
+      const t = 0.25 + hashed(c, i + 20) * 1.0;
+      const d = [
+        Math.cos(a) * Math.sin(t),
+        Math.cos(t),
+        Math.sin(a) * Math.sin(t),
+      ];
+      p.ball(
+        L.accent2,
+        [cx + d[0] * rx * 0.95, cy + d[1] * ry * 0.95, cz + d[2] * rz * 0.95],
+        0.06 + hashed(c, i + 40) * 0.05,
+      );
+    }
+  } else if (c.pattern === PATTERN.saddle) {
+    p.ball(L.dark, [cx, cy + ry * 0.3, cz], [rx * 0.93, ry * 0.75, rz * 0.9]);
+  }
+}
+
 export function buildCritter(c: Critter): CritterModel {
   const parts = new Parts();
   BUILDERS[c.body](parts, c);
+  addPattern(parts, c);
   addExtras(parts, c);
   const geometry = parts.build();
   // Each form is bigger than the last, still standing on y = 0; and each

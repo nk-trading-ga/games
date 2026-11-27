@@ -26,8 +26,6 @@ const OUT_DIR = path.join(SITE_DIR, "dist");
 const GAMES_OUT = path.join(OUT_DIR, "games");
 const ICONS_SRC = path.join(SITE_DIR, "assets", "icons");
 const ICONS_OUT = path.join(OUT_DIR, "icons");
-const APPS_SRC = path.join(SITE_DIR, "assets", "apps");
-const APPS_OUT = path.join(OUT_DIR, "apps");
 
 /**
  * The installed app's identity. The icons are Chofter's own knotwork C, taken
@@ -35,13 +33,13 @@ const APPS_OUT = path.join(OUT_DIR, "apps");
  * transparency — doesn't render it on black.
  */
 const APP = {
-  name: "Chofter Games",
+  name: "Liam K Games",
   /**
    * What the home screen calls it once installed. Deliberately the full name
    * rather than an abbreviation — iOS elides the middle of anything too long
-   * to fit, and "Chofter Games" fits.
+   * to fit, and "Liam K Games" fits.
    */
-  shortName: "Chofter Games",
+  shortName: "Liam K Games",
   description: "Little games, made for fun.",
   /**
    * What browser and OS chrome is tinted with — the iOS status bar of an
@@ -119,31 +117,6 @@ function stampAsset(src, outDir) {
   fs.writeFileSync(path.join(outDir, name), bytes);
   return name;
 }
-
-/**
- * Games that aren't in this repo because they aren't web games at all.
- *
- * Listed by hand — there's nothing to build or discover. The links deliberately
- * drop Apple's `/ie/` storefront segment: without it the App Store sends each
- * visitor to their own country's store instead of Ireland's.
- */
-const APP_STORE = [
-  {
-    name: "Mazers",
-    id: "6760861069",
-    icon: "mazers.png",
-  },
-  {
-    name: "Super Bubbly",
-    id: "6752374114",
-    icon: "super-bubbly.png",
-  },
-  {
-    name: "Kidz Fun Art",
-    id: "6443621939",
-    icon: "kidz-fun-art.png",
-  },
-];
 
 /** Folders that are never games, whatever they contain. */
 const IGNORED = new Set([
@@ -771,25 +744,12 @@ const SW_REGISTER = `      if ('serviceWorker' in navigator) {
         });
       }`;
 
-/** A link out to the App Store, under the game's own icon. */
-function renderAppCard(app) {
-  return `      <li class="app-card">
-        <a href="https://apps.apple.com/app/id${app.id}">
-          <img src="apps/${app.iconFile}" alt="" loading="lazy" width="128" height="128">
-          <div>
-            <h3>${escapeHtml(app.name)}</h3>
-            <span>On the App Store</span>
-          </div>
-        </a>
-      </li>`;
-}
-
-function renderPage(games, logoFile) {
+function renderPage(games) {
   const published = games.filter(g => g.status === "published");
   const development = games.filter(g => g.status !== "published");
   const cards = published.map(renderCard).join("\n");
   const empty = `      <li class="empty">No games published yet. Add a folder with its own build, then run this again.</li>`;
-  // In-development games get their own section under the app-store list, plainly
+  // In-development games get their own section under the published ones, plainly
   // flagged, so an unfinished game can be reached for testing without sitting
   // in the shelf of things that are meant to be played.
   const inDevelopment = development.length
@@ -816,7 +776,7 @@ ${renderShareHead({
     url: `${SITE_URL}/${SHARE_IMAGE}`,
     file: path.join(SITE_DIR, "assets", SHARE_IMAGE),
   },
-  alt: "The Chofter logo beside pictures from four of the games",
+  alt: "Pictures from the games",
 })}
     <link rel="stylesheet" href="styles.css" />
     <script>
@@ -826,8 +786,7 @@ ${SW_REGISTER}
   <body>
     <header class="hero">
       <div class="hero-title">
-        <img class="hero-logo" src="${logoFile}" alt="Chofter" title="Chofter" width="320" height="118">
-        <h1>Games</h1>
+        <h1>${escapeHtml(APP.name)}</h1>
       </div>
       <p>Little games, made for fun. Best on a tablet.</p>
     </header>
@@ -837,11 +796,6 @@ ${SW_REGISTER}
 ${published.length ? cards : empty}
       </ul>
 
-      <h2 class="section-title">Also on the App Store</h2>
-      <p class="section-note">Not web games — these ones live on your iPhone or iPad.</p>
-      <ul class="app-grid">
-${APP_STORE.map(renderAppCard).join("\n")}
-      </ul>
 ${inDevelopment}
     </main>
 
@@ -893,23 +847,9 @@ for (const game of games) {
   }
 }
 
-// ---- the gallery's own images ---------------------------------------------
-//
-// Stamped before the page is rendered, because the page has to link to the
-// stamped names. Everything here is content-addressed and cached for good; see
-// ASSET_CACHE_NAME.
-const logoFile = stampAsset(
-  path.join(SITE_DIR, "assets", "chofter-logo-640.png"),
-  OUT_DIR,
-);
-for (const app of APP_STORE) {
-  app.iconFile = stampAsset(path.join(APPS_SRC, app.icon), APPS_OUT);
-}
+// ---- the gallery page --------------------------------------------------------
 
-fs.writeFileSync(
-  path.join(OUT_DIR, "index.html"),
-  renderPage(staged, logoFile),
-);
+fs.writeFileSync(path.join(OUT_DIR, "index.html"), renderPage(staged));
 fs.cpSync(path.join(SITE_DIR, "styles.css"), path.join(OUT_DIR, "styles.css"));
 fs.cpSync(
   path.join(SITE_DIR, "assets", SHARE_IMAGE),
@@ -950,8 +890,6 @@ fs.writeFileSync(
     // open still has its artwork, but into the cache that survives a deploy
     // and only for the ones not already there.
     [
-      `./${logoFile}`,
-      ...APP_STORE.map(a => `./apps/${a.iconFile}`),
       ...staged
         .filter(g => g.cardFile)
         .map(g => `./games/${g.name}/${g.cardFile}`),

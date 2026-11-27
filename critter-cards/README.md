@@ -45,10 +45,14 @@ colours, moves, size, home and rarity — ★ Common, ★★ Rare, ★★★ Epi
 Legendary, and one ✦✦✦✦✦ Mythic: #1000, the Darkness King.
 
 Five beasts are drawn by hand (`src/critters.ts`); `src/dex.ts` makes the other
-328 species from one seed, the same way every time: one of the five body
-plans, a kind, colours from that kind, a stretch of the shape, a few extra
-parts — horns, back spikes, bat wings, a crown, armour, a gem — a name made of
-two halves (Pyrotooth, Mossgnash, Slateking), three moves and some facts.
+328 species from one seed, the same way every time: one of **twelve body
+plans** — the starters' wolf, shark, giant, scorpion and golem, and a dragon,
+hooded serpent, raptor, spider, fortress tortoise, ape and walking squid
+(`src/bodies.ts`) — a kind, colours from that kind, a stretch of the shape, a
+**pattern** (plain, stripes, spots or a dark saddle), a few extra parts —
+horns, back spikes, bat wings, a crown, armour, a gem, a third eye, tusks — a
+name made of two halves (Pyrotooth, Smokedrake, Cinderwidow), three moves and
+some facts.
 Three forms each makes 999 cards, and the Darkness King makes 1,000. Card art
 is drawn the first time a card is wanted, and the latest 90 are kept.
 
@@ -141,7 +145,9 @@ src/
   critters.ts  the five starters, forms, rarity, card numbers, who beats whom
   dex.ts       the other 995 cards, made from one seed; packs' and hunts' draws
   menu.ts      home, booster packs, the card book, a card's details
-  models.ts    each critter built from painted primitives, toon-shaded, outlined
+  parts.ts     the kit: painted spheres, cones, limbs, eyes, fangs, claws
+  models.ts    the starters' five bodies, extra parts, patterns, toon and outline
+  bodies.ts    seven more body plans, and where extras go on each
   cards.ts     card art drawn on a canvas, with a portrait rendered from the model
   stage.ts     renderer, the darkness city and its storm, camera, particles
   battle.ts    one battle as a script: summon, turns, hits, faint

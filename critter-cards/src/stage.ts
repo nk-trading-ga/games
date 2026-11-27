@@ -3,7 +3,8 @@ import {ParticleBurst} from "../../shared/particles";
 import {ARENA, BOSS, CAMERA, CITY, EFFECTS, STORM} from "./config";
 import {mulberry} from "./anim";
 import {makeBolt} from "./effects";
-import {Parts, outlined} from "./models";
+import {outlined} from "./models";
+import {Parts} from "./parts";
 
 // The renderer, the darkness city the battles happen in, the storm over it,
 // the camera, and the particle pools every effect draws from.

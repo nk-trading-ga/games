@@ -1,4 +1,4 @@
-# Chofter Games
+# Liam K Games
 
 Little web games, and the site that publishes them: **games.chofter.com**.
 
@@ -35,9 +35,8 @@ thing deploys as a folder.
 | [**Whale**](whale/README.md)                     | Swim a coral reef as a beluga. Eat the fish, dodge the plastic, come up for air and breach. Find the shipwreck, and the black hole where you hunt by sonar.                                                                    |
 | [**Vroom**](vroom/README.md)                     | Race a lap, hold it sideways through the corners, then draw a track of your own. _In development._                                                                                                                             |
 
-The gallery also links out to native apps on the App Store (Mazers, Super
-Bubbly, Kidz Fun Art). Those aren't in this repo — they're listed by hand in
-`site/build.mjs`.
+The gallery is titled **Liam K Games**, and for now it shows only Critter
+Cards (see `ONLY_GAMES` in `site/build.mjs`).
 
 ## Building the whole site
 

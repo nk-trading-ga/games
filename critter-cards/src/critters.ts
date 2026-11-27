@@ -16,8 +16,10 @@ export interface Move {
   icon: string;
 }
 
-/** The five body plans every beast is built on. */
-export type Body = "wolf" | "shark" | "giant" | "scorpion" | "golem";
+import type {NewBody} from "./bodies";
+
+/** The body plans every beast is built on: the starters' five, and seven more. */
+export type Body = "wolf" | "shark" | "giant" | "scorpion" | "golem" | NewBody;
 
 /**
  * A beast's colours beyond its body colour. The starters leave it out and use
@@ -57,7 +59,12 @@ export const EXTRA = {
   crown: 8,
   armour: 16,
   gem: 32,
+  thirdEye: 64,
+  tusks: 128,
 } as const;
+
+/** Markings painted over the body: none, stripes, spots, or a dark back. */
+export const PATTERN = {plain: 0, stripes: 1, spots: 2, saddle: 3} as const;
 
 export const RARITY = [
   "Common",
@@ -83,6 +90,8 @@ export interface Critter {
   look?: Look;
   /** Which EXTRA parts it has. */
   extras: number;
+  /** Its PATTERN. */
+  pattern: number;
   /** Stretch: how wide and tall it is next to the plain body plan. */
   shape: {wide: number; tall: number};
   /** 0 common, 1 rare, 2 epic: how rare its first form is. */
@@ -141,6 +150,7 @@ export const CRITTERS: ReadonlyArray<Critter> = [
     index: 0,
     body: "wolf",
     extras: 0,
+    pattern: 0,
     shape: {wide: 1, tall: 1},
     tier: 1,
     height: 1.3,
@@ -180,6 +190,7 @@ export const CRITTERS: ReadonlyArray<Critter> = [
     index: 1,
     body: "shark",
     extras: 0,
+    pattern: 0,
     shape: {wide: 1, tall: 1},
     tier: 1,
     height: 1.7,
@@ -218,6 +229,7 @@ export const CRITTERS: ReadonlyArray<Critter> = [
     index: 2,
     body: "giant",
     extras: 0,
+    pattern: 0,
     shape: {wide: 1, tall: 1},
     tier: 1,
     height: 2.4,
@@ -256,6 +268,7 @@ export const CRITTERS: ReadonlyArray<Critter> = [
     index: 3,
     body: "scorpion",
     extras: 0,
+    pattern: 0,
     shape: {wide: 1, tall: 1},
     tier: 1,
     height: 1.1,
@@ -298,6 +311,7 @@ export const CRITTERS: ReadonlyArray<Critter> = [
     index: 4,
     body: "golem",
     extras: 0,
+    pattern: 0,
     shape: {wide: 1, tall: 1},
     tier: 1,
     height: 2.6,
