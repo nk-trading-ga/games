@@ -95,6 +95,8 @@ class Game {
         if (i >= 0) {
           await this.bossFight(i);
         }
+      } else if (choice === "versus") {
+        await this.versus();
       } else if (choice === "fight") {
         await this.ladder();
       } else if (choice === "hunt") {
@@ -173,9 +175,13 @@ class Game {
     trainer: Trainer,
     wild: boolean,
     boss?: BossFight,
+    mine = cardByNumber(this.data.active),
+    versus = false,
   ): Battle {
-    const mine = cardByNumber(this.data.active);
     this.ui.showBattle(mine, foe, trainer.name, 0, 1);
+    if (versus) {
+      this.ui.setOwner("player", "Player 1");
+    }
     this.ui.setBoss(boss !== undefined);
     return new Battle(
       this.stage,
@@ -197,7 +203,62 @@ class Game {
           }
         : undefined,
       boss,
+      versus,
     );
+  }
+
+  /**
+   * Two players on one iPad. Each picks a beast from the cards here, then
+   * they take turns; rematches keep the same beasts.
+   */
+  private async versus(): Promise<void> {
+    for (;;) {
+      const one = await this.menu.pickFighter(this.data, "Player 1", "p1");
+      if (one < 0) {
+        return;
+      }
+      const two = await this.menu.pickFighter(this.data, "Player 2", "p2");
+      if (two < 0) {
+        return;
+      }
+      for (;;) {
+        const p1 = cardByNumber(one);
+        const p2 = cardByNumber(two);
+        const trainer: Trainer = {
+          name: "Player 2",
+          form: p2.form,
+          puff: statsOf(p2).puff,
+          hitScale: 1,
+        };
+        const battle = this.newBattle(p2, trainer, false, undefined, p1, true);
+        this.ui.setRound("👫 2 Players");
+        this.battle = battle;
+        const outcome = await battle.run();
+        const winner = outcome === "won" ? "Player 1" : "Player 2";
+        const [w, l] = outcome === "won" ? [p1, p2] : [p2, p1];
+        const loser = outcome === "won" ? "Player 2" : "Player 1";
+        this.sounds.play("win");
+        await battle.celebrate(outcome === "won" ? "player" : "foe");
+        const choice = await this.ui.showResult(
+          `🏆 ${winner} wins! 🏆`,
+          `${winner}'s ${w.name} beat ${loser}'s ${l.name}!`,
+          w,
+          [
+            {id: "again", label: "Rematch!", main: true},
+            {id: "new", label: "Pick new beasts"},
+            {id: "home", label: "Home"},
+          ],
+        );
+        battle.dispose();
+        this.ui.setTurn(null);
+        if (choice === "home") {
+          return;
+        }
+        if (choice === "new") {
+          break;
+        }
+      }
+    }
   }
 
   /** One fight against each of the other four starters, getting harder. */

@@ -55,6 +55,7 @@ export class UI {
   private readonly round: HTMLDivElement;
   private readonly banner: HTMLDivElement;
   private readonly moves: HTMLDivElement;
+  private readonly turn: HTMLDivElement;
   private readonly moveButtons: Array<HTMLButtonElement> = [];
   private readonly charge: ProgressBar;
   private readonly result: HTMLDivElement;
@@ -92,6 +93,7 @@ export class UI {
     this.round = el("div", "round", this.hud);
     this.banner = el("div", "banner hidden", this.hud);
     this.moves = el("div", "moves hidden", this.hud);
+    this.turn = el("div", "turn hidden", this.hud);
     for (let i = 0; i < 4; i++) {
       const b = el("button", "move", this.moves);
       this.moveButtons.push(b);
@@ -260,6 +262,18 @@ export class UI {
   say(text: string): void {
     this.banner.textContent = text;
     this.banner.classList.remove("hidden");
+  }
+
+  /** Who a panel's beast belongs to: "You", a trainer, a player. */
+  setOwner(side: Side, owner: string): void {
+    this.panels[side].owner.textContent = owner;
+  }
+
+  /** Whose turn it is, over the moves, in a two-player fight. */
+  setTurn(who: string | null, side: "p1" | "p2" = "p1"): void {
+    this.turn.classList.toggle("hidden", who === null);
+    this.turn.className = who === null ? "turn hidden" : `turn turn-${side}`;
+    this.turn.textContent = who === null ? "" : `${who}'s turn!`;
   }
 
   hush(): void {

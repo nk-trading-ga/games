@@ -14,7 +14,8 @@ import {BOSSES, CARD_COUNT, cardByNumber, statsOf} from "./dex";
 // The screens between fights: home, booster packs, the card book, and a
 // card's details.
 
-export type HomeChoice = "boss" | "fight" | "hunt" | "packs" | "cards";
+export type HomeChoice =
+  "boss" | "fight" | "hunt" | "versus" | "packs" | "cards";
 
 /** What the screens need to know, and to change, about the player's things. */
 export interface Collection {
@@ -119,6 +120,7 @@ export class Menu {
           : `Boss ${boss + 1} of ${BOSSES.length}: ${BOSSES[boss].title}`,
       );
       big("fight", "⚔️", "Fight Trainers", "Win packs and Critter Balls");
+      big("versus", "👫", "2 Players", "Fight a friend on this iPad");
       big(
         "hunt",
         "🌃",
@@ -286,6 +288,57 @@ export class Menu {
           );
         }
       });
+    });
+  }
+
+  /**
+   * One player choosing a beast from the cards on this iPad, for a
+   * two-player fight. Resolves with its card number, or -1 to go back.
+   */
+  pickFighter(c: Collection, who: string, side: "p1" | "p2"): Promise<number> {
+    return new Promise(resolve => {
+      let page = 0;
+      const numbers = Object.keys(c.owned)
+        .map(Number)
+        .sort((a, b) => a - b);
+      const show = () => {
+        const s = this.screen(`pick-fighter pick-${side}`);
+        this.button(s, "close-button", "✕", () => {
+          this.hide();
+          resolve(-1);
+        });
+        el("h2", "screen-title", s, `${who}, pick your beast!`);
+        const pages = Math.max(1, Math.ceil(numbers.length / PER_PAGE));
+        const grid = el("div", "book-grid", s);
+        for (const n of numbers.slice(page * PER_PAGE, (page + 1) * PER_PAGE)) {
+          const critter = cardByNumber(n);
+          const slot = el("button", "slot", grid);
+          const img = el("img", "slot-card", slot);
+          img.alt = critter.name;
+          img.src = this.art.url(critter);
+          slot.addEventListener("click", () => {
+            this.sounds.unlock();
+            this.sounds.cry(critter);
+            this.hide();
+            resolve(n);
+          });
+        }
+        if (pages > 1) {
+          const nav = el("div", "book-nav", s);
+          const prev = this.button(nav, "nav-button", "◀", () => {
+            page = Math.max(0, page - 1);
+            show();
+          });
+          prev.disabled = page === 0;
+          el("span", "book-page", nav, `Page ${page + 1} of ${pages}`);
+          const next = this.button(nav, "nav-button", "▶", () => {
+            page = Math.min(pages - 1, page + 1);
+            show();
+          });
+          next.disabled = page >= pages - 1;
+        }
+      };
+      show();
     });
   }
 

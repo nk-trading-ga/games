@@ -100,6 +100,8 @@ export class Battle {
     private readonly trainer: Trainer,
     private readonly wild?: Wild,
     private readonly boss?: BossFight,
+    /** Two players on one iPad: both sides are tapped, neither is the game. */
+    private readonly versus = false,
   ) {
     this.effects = new Effects(stage, clock, sounds);
     this.player = this.makeFighter(
@@ -247,9 +249,41 @@ export class Battle {
   }
 
   private name(f: Fighter): string {
-    return f.side === "player"
-      ? f.critter.name
-      : `${this.trainer.name}'s ${f.critter.name}`;
+    if (f.side === "player") {
+      return this.versus ? `Player 1's ${f.critter.name}` : f.critter.name;
+    }
+    return `${this.trainer.name}'s ${f.critter.name}`;
+  }
+
+  /**
+   * Two players, taking turns on the same screen. Who goes first is a coin
+   * toss; each taps their own moves, and the moves row says whose turn it is.
+   */
+  private async twoPlayers(): Promise<Outcome> {
+    let turn = Math.random() < 0.5 ? 0 : 1;
+    const label = (i: number) => (i === 0 ? "Player 1" : "Player 2");
+    this.ui.say(`${label(turn)} goes first!`);
+    await this.clock.wait(TIMING.announce * 1.6);
+    for (;;) {
+      const attacker = turn === 0 ? this.player : this.foe;
+      const target = turn === 0 ? this.foe : this.player;
+      this.ui.setTurn(label(turn), turn === 0 ? "p1" : "p2");
+      const move = await this.ui.chooseMove(
+        attacker.critter,
+        attacker.charge,
+        BATTLE.superCharge,
+      );
+      this.ui.setTurn(null);
+      if (move !== "ball") {
+        await this.use(attacker, target, move);
+      }
+      if (target.puff <= 0) {
+        await this.faint(target);
+        return turn === 0 ? "won" : "lost";
+      }
+      await this.clock.wait(TIMING.betweenTurns * 0.6);
+      turn = 1 - turn;
+    }
   }
 
   /** The whole battle, start to finish. */
@@ -271,6 +305,9 @@ export class Battle {
     this.ui.say(`Go, ${this.player.critter.name}!`);
     await this.summon(this.player);
     this.ui.showPanel("player");
+    if (this.versus) {
+      return this.twoPlayers();
+    }
 
     for (;;) {
       const move = await this.ui.chooseMove(
@@ -708,7 +745,8 @@ export class Battle {
   }
 
   /** Throws confetti over your critter and has it hop about. */
-  async celebrate(): Promise<void> {
+  async celebrate(side: Side = "player"): Promise<void> {
+    const winner = side === "player" ? this.player : this.foe;
     // Over the middle of the field and well up: burst near the camera, every
     // scrap of paper is the size of a hand.
     const at = new THREE.Vector3(0, 3.5, -0.5);
@@ -723,8 +761,8 @@ export class Battle {
         size: 0.7,
         spherical: 0.6,
       });
-      this.sounds.cry(this.player.critter);
-      await this.hop(this.player, 0.6, 0.45);
+      this.sounds.cry(winner.critter);
+      await this.hop(winner, 0.6, 0.45);
     }
   }
 

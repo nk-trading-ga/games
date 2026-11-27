@@ -52,7 +52,7 @@ two halves (Pyrotooth, Mossgnash, Slateking), three moves and some facts.
 Three forms each makes 999 cards, and the Darkness King makes 1,000. Card art
 is drawn the first time a card is wanted, and the latest 90 are kept.
 
-**Home** has five things to do:
+**Home** has six things to do:
 
 - **👹 Boss Battles** — six bosses, one after another: a giant Mega beast of
   each kind, each on a different body plan (the Lord of Flames, the Terror of
@@ -67,6 +67,12 @@ is drawn the first time a card is wanted, and the latest 90 are kept.
   `src/config.ts`.
 - **⚔️ Fight Trainers** — the four fights. Each win gives a booster pack and 2
   Critter Balls; beating all four gives 3 more packs.
+- **👫 2 Players** — two people on one iPad. Each picks a beast from the
+  cards on it, a coin toss says who goes first, and they take turns tapping
+  their moves; a bubble over the moves says whose turn it is, blue for
+  Player 1 and red for Player 2. The winner gets a trophy, and **Rematch!**
+  keeps the same beasts. Nothing is counted toward evolving, and nothing is
+  won or lost from the book.
 - **🌃 Hunt Wild Beasts** — a wild beast climbs out of a dark hole in the
   roof. Fight it, and throw a **Critter Ball** 🔮 (dark metal with a glowing
   ring) to catch it: the weaker it is, the better the chance it stays in. One
