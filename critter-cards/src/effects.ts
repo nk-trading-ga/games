@@ -4,12 +4,17 @@ import {Clock, Ease, lerp} from "./anim";
 import type {Sounds} from "./audio";
 import {EFFECTS} from "./config";
 import type {EffectKind} from "./critters";
-import {toonMaterial} from "./models";
+import {leafMaterial, rockGeometry, rockMaterial, type HeldLight} from "./fx";
 import type {Stage} from "./stage";
 
 // What every special move looks like. Each one throws something from one
-// critter at the other and calls back as each piece lands, so the battle can
+// beast at the other and calls back as each piece lands, so the battle can
 // flash the target and knock it back in time with the picture.
+//
+// They are meant to look real: fire is hundreds of glowing flames that burn
+// white in the middle, trail smoke, and carry a light that shines on the
+// floor and the beasts; rocks are lumpy, cracked stone; water is glossy and
+// catches reflections; lightning lights up the whole roof.
 
 export interface Shot {
   /** Where the move comes from: the attacker's face. */
@@ -32,40 +37,47 @@ interface Volley {
   /** Where piece `i` is at time t along its flight, written into `out`. */
   path: (t: number, i: number, out: THREE.Vector3) => void;
   /** Anything else a piece does each frame: spin, leave a trail. */
-  frame?: (piece: THREE.Object3D, t: number, dt: number) => void;
+  frame?: (piece: THREE.Object3D, t: number, dt: number, i: number) => void;
   /** The splash where it lands. */
   land: (at: THREE.Vector3, i: number) => void;
 }
 
-const FIRE = [0xff4a1c, 0xff9a1f, 0xffe14a];
-const WATER = [0x7fd0ff, 0xbfe9ff, 0xffffff];
-const LEAF = [0x2f7d32, 0x7ed957, 0x1b4d22];
-const THORN = [0xd8b67a, 0x8a6a3a, 0xfff0c0];
-const SPARK = [0xfff27a, 0xffffff, 0xffcc1f];
-const DUST = [0x8c857a, 0x6d665e, 0xff6a1f];
-const DRAGON = [0x9a5bff, 0x3fb0ff, 0xffffff];
-const PSYCHIC = [0xff5ecf, 0xffb3e6, 0xc8a0ff];
-const PUNCH = [0xffb03a, 0xffffff, 0xff5a1f];
-const SHADOW = [0x9a5bff, 0x2a1040, 0xff3b5c];
+/** The colours a kind of flame burns: white-hot to its edge. */
+interface Flame {
+  hot: number;
+  edge: number;
+  light: number;
+}
+
+const FIRE: Flame = {hot: 0xffb84a, edge: 0xc82400, light: 0xff7a20};
+const DRAGON: Flame = {hot: 0x6aa0ff, edge: 0x3a08b0, light: 0x8a6aff};
+const PSYCHIC: Flame = {hot: 0xffa8e6, edge: 0xc0108a, light: 0xff5ecf};
+const PUNCH: Flame = {hot: 0xffc870, edge: 0xd04a00, light: 0xffa040};
+const SHADOW: Flame = {hot: 0xb070ff, edge: 0x2a0060, light: 0x9a5bff};
+const ZAP: Flame = {hot: 0xffffff, edge: 0x5aa8ff, light: 0xbfe0ff};
 
 const up = new THREE.Vector3(0, 1, 0);
+const spread = (k: number) => (Math.random() * 2 - 1) * k;
 
 // Shared geometry and materials, made once and kept: effects come and go every
 // turn and there's no reason to rebuild these each time.
-const sphere = new THREE.SphereGeometry(1, 16, 12);
-const fireCore = new THREE.MeshBasicMaterial({color: 0xfff1a0});
-const fireShell = new THREE.MeshBasicMaterial({
-  color: 0xe8320c,
+const sphere = new THREE.SphereGeometry(1, 20, 14);
+const hotCore = new THREE.MeshBasicMaterial({color: 0xffffff});
+const water = new THREE.MeshStandardMaterial({
+  color: 0x2a7cff,
   transparent: true,
-  opacity: 0.75,
+  opacity: 0.72,
+  roughness: 0.04,
+  metalness: 0.1,
+  envMapIntensity: 2.2,
 });
-const waterMat = new THREE.MeshBasicMaterial({
-  color: 0x3a8cff,
+const foam = new THREE.MeshStandardMaterial({
+  color: 0xe8f6ff,
+  roughness: 0.2,
   transparent: true,
-  opacity: 0.8,
-  depthWrite: false,
+  opacity: 0.85,
 });
-const ringGeo = new THREE.RingGeometry(0.8, 1, 40);
+const ringGeo = new THREE.RingGeometry(0.8, 1, 48);
 const slashGeo = new THREE.PlaneGeometry(0.05, 0.9);
 const slashCore = new THREE.MeshBasicMaterial({
   color: 0xffffff,
@@ -78,73 +90,55 @@ const slashGlow = new THREE.MeshBasicMaterial({
   transparent: true,
   opacity: 0.8,
   depthTest: false,
+  blending: THREE.AdditiveBlending,
 });
-const shineMat = new THREE.MeshBasicMaterial({color: 0xffffff});
-const dragonCore = new THREE.MeshBasicMaterial({color: 0xe8f4ff});
-const dragonShell = new THREE.MeshBasicMaterial({
-  color: 0x7a4bff,
-  transparent: true,
-  opacity: 0.7,
-});
-const psyRing = new THREE.TorusGeometry(1, 0.12, 8, 32);
+const psyRing = new THREE.TorusGeometry(1, 0.09, 10, 48);
 const psyMat = new THREE.MeshBasicMaterial({
   color: 0xff5ecf,
   transparent: true,
-  opacity: 0.85,
   depthWrite: false,
+  blending: THREE.AdditiveBlending,
 });
-const fistMat = new THREE.MeshBasicMaterial({color: 0xffb03a});
-const fistGlow = new THREE.MeshBasicMaterial({
-  color: 0xffffff,
-  transparent: true,
-  opacity: 0.4,
-  depthWrite: false,
+const fistMat = new THREE.MeshStandardMaterial({
+  color: 0xffa030,
+  emissive: 0xff5a10,
+  emissiveIntensity: 0.9,
+  roughness: 0.3,
+  metalness: 0.2,
 });
+// Black glass: very smooth, a little metallic, so it shines with reflections.
 const spikeGeo = new THREE.ConeGeometry(0.16, 1.2, 7);
-const spikeMat = new THREE.MeshBasicMaterial({color: 0x1a0a2a});
-const spikeGlow = new THREE.MeshBasicMaterial({
-  color: 0x9a5bff,
-  transparent: true,
-  opacity: 0.55,
-  depthWrite: false,
+const obsidian = new THREE.MeshStandardMaterial({
+  color: 0x140a1e,
+  emissive: 0x2a0a48,
+  emissiveIntensity: 0.6,
+  roughness: 0.12,
+  metalness: 0.6,
+  flatShading: true,
 });
-const boltMat = new THREE.MeshBasicMaterial({color: 0xfff27a});
-const boltGlow = new THREE.MeshBasicMaterial({
-  color: 0xffffff,
-  transparent: true,
-  opacity: 0.45,
-  depthWrite: false,
+const thornMat = new THREE.MeshStandardMaterial({
+  color: 0xd8b67a,
+  roughness: 0.45,
 });
-
-function painted(geo: THREE.BufferGeometry, colour: number) {
-  const g = geo.index ? geo.toNonIndexed() : geo;
-  const c = new THREE.Color(colour);
-  const n = g.attributes.position.count;
-  const paint = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) {
-    paint.set([c.r, c.g, c.b], i * 3);
-  }
-  g.setAttribute("color", new THREE.BufferAttribute(paint, 3));
-  return g;
-}
-
-const leafGeo = painted(new THREE.SphereGeometry(1, 10, 6), 0x4fb35f);
 // A thorn, its point turned to face +Z so lookAt aims it like an arrow.
-const thornGeo = painted(
-  new THREE.ConeGeometry(0.05, 0.32, 8).rotateX(Math.PI / 2),
-  0xd8b67a,
-);
-const rockGeo = [0x9a8f80, 0x857a6c, 0xb0a593].map(c =>
-  painted(new THREE.IcosahedronGeometry(1, 0), c),
-);
-const toon = toonMaterial();
-
-const spread = (k: number) => (Math.random() * 2 - 1) * k;
+const thornGeo = new THREE.ConeGeometry(0.05, 0.34, 8).rotateX(Math.PI / 2);
+const leafGeo = new THREE.PlaneGeometry(0.42, 0.21);
+const leafMat = leafMaterial();
+const rockGeos = [1, 2, 3, 4, 5].map(rockGeometry);
+const rockMats = [0xc8bfb0, 0xb0a593, 0xd8cfc0].map(rockMaterial);
+const boltCore = new THREE.MeshBasicMaterial({color: 0xffffff});
+const boltGlow = new THREE.MeshBasicMaterial({
+  color: 0x8fc8ff,
+  transparent: true,
+  opacity: 0.6,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+});
 
 /**
  * A bolt of lightning from `start` to `end`: a jagged line of thin tubes, a
- * yellow core inside a soft white glow. Used by the zap moves and by the storm
- * over the city.
+ * white core inside a glowing blue sheath. Used by the zap moves and by the
+ * storm over the city.
  */
 export function makeBolt(
   start: THREE.Vector3,
@@ -152,23 +146,11 @@ export function makeBolt(
   width: number,
   jag = 0.45,
 ): THREE.Group {
-  const points: Array<THREE.Vector3> = [];
-  const steps = 9;
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const j = i === 0 || i === steps ? 0 : jag;
-    points.push(
-      new THREE.Vector3(
-        lerp(start.x, end.x, t) + spread(j),
-        lerp(start.y, end.y, t),
-        lerp(start.z, end.z, t) + spread(j),
-      ),
-    );
-  }
+  const points = boltPoints(start, end, jag);
   const core: Array<THREE.BufferGeometry> = [];
   const glow: Array<THREE.BufferGeometry> = [];
   const q = new THREE.Quaternion();
-  for (let i = 0; i < steps; i++) {
+  for (let i = 0; i < points.length - 1; i++) {
     const a = points[i];
     const b = points[i + 1];
     const d = new THREE.Vector3().subVectors(b, a);
@@ -176,8 +158,8 @@ export function makeBolt(
     q.setFromUnitVectors(up, d.normalize());
     const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
     for (const [list, r] of [
-      [core, 0.05 * width],
-      [glow, 0.14 * width],
+      [core, 0.04 * width],
+      [glow, 0.16 * width],
     ] as const) {
       const g = new THREE.CylinderGeometry(r, r, len + r, 6, 1, true);
       g.applyQuaternion(q);
@@ -191,9 +173,33 @@ export function makeBolt(
     list.forEach(g => g.dispose());
     return m ?? new THREE.BufferGeometry();
   };
-  group.add(new THREE.Mesh(merge(core), boltMat));
-  group.add(new THREE.Mesh(merge(glow), boltGlow));
+  group.add(new THREE.Mesh(merge(core), boltCore));
+  const glowMesh = new THREE.Mesh(merge(glow), boltGlow);
+  glowMesh.renderOrder = 4;
+  group.add(glowMesh);
+  group.userData.points = points;
   return group;
+}
+
+function boltPoints(
+  start: THREE.Vector3,
+  end: THREE.Vector3,
+  jag: number,
+): Array<THREE.Vector3> {
+  const points: Array<THREE.Vector3> = [];
+  const steps = 12;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const j = i === 0 || i === steps ? 0 : jag;
+    points.push(
+      new THREE.Vector3(
+        lerp(start.x, end.x, t) + spread(j),
+        lerp(start.y, end.y, t),
+        lerp(start.z, end.z, t) + spread(j),
+      ),
+    );
+  }
+  return points;
 }
 
 export class Effects {
@@ -206,9 +212,9 @@ export class Effects {
   play(kind: EffectKind, shot: Shot): Promise<void> {
     switch (kind) {
       case "fireball":
-        return this.fireball(shot);
+        return this.fireball(shot, FIRE, true);
       case "bubbles":
-        return this.bubbles(shot);
+        return this.waterJets(shot);
       case "leaves":
         return this.leaves(shot);
       case "zap":
@@ -224,49 +230,85 @@ export class Effects {
       case "shadow":
         return this.shadow(shot);
       case "tackle":
-        // A tackle is the critter itself running in; the battle moves it.
+        // A tackle is the beast itself running in; the battle moves it.
         shot.onImpact(0);
         return Promise.resolve();
     }
   }
 
-  /** Powering up for a super move: a ring and a fountain of sparks. */
-  async aura(at: THREE.Vector3, colours: ReadonlyArray<number>): Promise<void> {
-    this.sounds.play("charge");
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(1, 0.06, 8, 40),
-      new THREE.MeshBasicMaterial({
-        color: colours[0],
-        transparent: true,
-        depthWrite: false,
-      }),
-    );
-    ring.rotation.x = Math.PI / 2;
-    ring.position.copy(at).setY(0.08);
-    this.stage.scene.add(ring);
-    const p = new THREE.Vector3();
-    await this.clock.tween(
-      0.8,
-      t => {
-        ring.scale.setScalar(0.4 + t * 1.2);
-        (ring.material as THREE.MeshBasicMaterial).opacity = 1 - t * t;
-        const a = Math.random() * Math.PI * 2;
-        p.set(at.x + Math.cos(a) * 0.7, 0.1, at.z + Math.sin(a) * 0.7);
-        this.stage.sparks.burst(p, {
-          color: colours,
-          count: 3,
-          speed: 0.3,
-          lift: 3.2,
-          gravity: 0.5,
-          ttl: 0.7,
-          size: 1.2,
-        });
-      },
-      Ease.linear,
-    );
-    this.stage.scene.remove(ring);
-    ring.geometry.dispose();
-    (ring.material as THREE.Material).dispose();
+  // ---- the building blocks ------------------------------------------------
+
+  /** A lick of flame at a point: a few glowing puffs, rising and cooling. */
+  private flame(at: THREE.Vector3, f: Flame, size: number, count = 6): void {
+    this.stage.glow.emit({
+      at,
+      count,
+      jitter: size * 0.25,
+      spread: size * 0.8,
+      life: [0.25, 0.45],
+      size: [size * 1.3, size * 0.2],
+      color: [f.hot, f.edge],
+      alpha: [0.55, 0],
+      gravity: -1.6,
+      drag: 3,
+    });
+  }
+
+  private smokePuff(at: THREE.Vector3, size: number, colour = 0x2a2622) {
+    this.stage.smoke.emit({
+      at,
+      jitter: size * 0.3,
+      spread: size * 0.5,
+      life: [0.7, 1.2],
+      size: [size * 0.8, size * 2.6],
+      color: [colour, colour],
+      alpha: [0.45, 0],
+      gravity: -0.6,
+      drag: 1.5,
+    });
+  }
+
+  /**
+   * A blast: a ball of flame thrown outward, smoke rolling up after it,
+   * embers, and a flash of light on everything round it.
+   */
+  private explode(at: THREE.Vector3, f: Flame, s: number, smoky = true) {
+    this.stage.glow.emit({
+      at,
+      count: Math.round(45 * s),
+      jitter: 0.1 * s,
+      spread: 3.2 * s,
+      life: [0.35, 0.7],
+      size: [0.7 * s, 0.15 * s],
+      color: [f.hot, f.edge],
+      alpha: [0.6, 0],
+      gravity: -1.2,
+      drag: 3.5,
+    });
+    this.stage.glow.emit({
+      at,
+      count: 3,
+      life: [0.12, 0.2],
+      size: [1.6 * s, 2.4 * s],
+      color: [f.hot, f.edge],
+      alpha: [0.45, 0],
+    });
+    if (smoky) {
+      for (let k = 0; k < 10; k++) {
+        this.smokePuff(at, 0.5 * s);
+      }
+    }
+    this.stage.sparks.burst(at, {
+      color: [f.hot, f.edge, f.light],
+      count: 18,
+      speed: 3.5 * s,
+      lift: 2,
+      gravity: 5,
+      ttl: 0.8,
+      size: 0.7,
+      spherical: 0.9,
+    });
+    this.stage.lights.flash(at, f.light, 28 * s, 0.45);
   }
 
   /** Throws `count` pieces one after another and waits for them all. */
@@ -289,7 +331,7 @@ export class Effects {
       v.flight,
       t => {
         v.path(t, i, piece.position);
-        v.frame?.(piece, t, (t - last) * v.flight);
+        v.frame?.(piece, t, (t - last) * v.flight, i);
         last = t;
       },
       Ease.linear,
@@ -307,6 +349,15 @@ export class Effects {
     }
   }
 
+  /** Lights for the first few pieces of a volley, carried as they fly. */
+  private carried(count: number, colour: number, intensity: number) {
+    const held: Array<HeldLight | null> = [];
+    for (let i = 0; i < count; i++) {
+      held.push(i < 2 ? this.stage.lights.hold(colour, intensity) : null);
+    }
+    return held;
+  }
+
   /** A ring blasting outward along the ground from where a hit lands. */
   shockwave(at: THREE.Vector3, colour: number, size = 1): void {
     const ring = new THREE.Mesh(
@@ -315,6 +366,7 @@ export class Effects {
         color: colour,
         transparent: true,
         depthWrite: false,
+        blending: THREE.AdditiveBlending,
       }),
     );
     ring.rotation.x = -Math.PI / 2;
@@ -335,6 +387,35 @@ export class Effects {
       });
   }
 
+  /** Powering up for a super move: flames of its colour pouring upward. */
+  async aura(at: THREE.Vector3, colours: ReadonlyArray<number>): Promise<void> {
+    this.sounds.play("charge");
+    const f: Flame = {hot: 0xffffff, edge: colours[0], light: colours[0]};
+    const light = this.stage.lights.hold(colours[0], 10);
+    const p = new THREE.Vector3();
+    await this.clock.tween(
+      0.8,
+      t => {
+        for (let k = 0; k < 3; k++) {
+          const a = Math.random() * Math.PI * 2;
+          p.set(at.x + Math.cos(a) * 0.7, 0.1, at.z + Math.sin(a) * 0.7);
+          this.stage.glow.emit({
+            at: p,
+            vel: new THREE.Vector3(0, 2.6, 0),
+            spread: 0.4,
+            life: [0.5, 0.8],
+            size: [0.45, 0.05],
+            color: [f.hot, f.edge],
+            alpha: [0.8 * t + 0.2, 0],
+          });
+        }
+        light?.move(new THREE.Vector3(at.x, 0.6, at.z));
+      },
+      Ease.linear,
+    );
+    light?.release();
+  }
+
   /** Three claw marks ripped across the target, flashing and gone. */
   slash(at: THREE.Vector3): Promise<void> {
     const group = new THREE.Group();
@@ -352,6 +433,7 @@ export class Effects {
       marks.push(mark);
     }
     this.stage.scene.add(group);
+    this.stage.lights.flash(at, 0xff4040, 10, 0.3);
     return this.clock
       .tween(
         0.4,
@@ -369,7 +451,13 @@ export class Effects {
       });
   }
 
-  private fireball(shot: Shot): Promise<void> {
+  // ---- the moves ----------------------------------------------------------
+
+  /**
+   * Fireballs: a white-hot core wrapped in flame, trailing smoke, lighting
+   * the floor as it flies, bursting where it lands.
+   */
+  private fireball(shot: Shot, f: Flame, smoky: boolean): Promise<void> {
     const big = shot.big;
     const s = (big ? EFFECTS.superScale : 1) * shot.power;
     const count = big ? 7 : 2;
@@ -379,57 +467,96 @@ export class Effects {
         ? shot.to.clone()
         : shot.to.clone().add(new THREE.Vector3(spread(0.6), 0, spread(0.6))),
     );
+    const lights = this.carried(count, f.light, 9 * s);
     this.sounds.play("fire");
     return this.volley({
       count,
       flight: EFFECTS.flight,
       stagger: EFFECTS.stagger * 2,
       make: () => {
-        const g = new THREE.Group();
-        g.add(new THREE.Mesh(sphere, fireCore));
-        const shell = new THREE.Mesh(sphere, fireShell);
-        shell.scale.setScalar(1.4);
-        g.add(shell);
-        g.scale.setScalar(0.32 * s);
-        return g;
+        const core = new THREE.Mesh(sphere, hotCore);
+        core.scale.setScalar(0.1 * s);
+        return core;
       },
       path: (t, i, out) => {
         out.lerpVectors(shot.from, ends[i], t);
         out.y += Math.sin(Math.PI * t) * (big ? 1.4 : 0.8);
       },
-      frame: piece => {
-        piece.rotation.y += 0.3;
-        this.stage.sparks.burst(piece.position, {
-          color: FIRE,
-          count: big ? 3 : 2,
-          speed: 0.4,
-          lift: 0.4,
-          gravity: -1.5,
-          ttl: 0.35,
-          size: s,
-        });
+      frame: (piece, _t, _dt, i) => {
+        this.flame(piece.position, f, 0.3 * s, 6);
+        if (smoky && Math.random() < 0.5) {
+          this.smokePuff(piece.position, 0.18 * s);
+        }
+        lights[i]?.move(piece.position);
       },
       land: (at, i) => {
-        this.stage.sparks.burst(at, {
-          color: FIRE,
-          count: big ? 60 : 45,
-          speed: 3.2 * s,
-          lift: 1.5,
-          gravity: 2,
-          ttl: 0.6,
-          size: 1.3 * s,
-          spherical: 0.8,
-        });
+        lights[i]?.release();
+        this.explode(at, f, s, smoky);
         this.sounds.play(big ? "superHit" : "hit");
-        this.shockwave(at, 0xff6a1f, s);
+        this.shockwave(at, f.light, s);
         this.shakeOnHit(shot);
         shot.onImpact(i);
       },
     });
   }
 
-  /** A blast of water: fat jets streaking in, bursting into spray. */
-  private bubbles(shot: Shot): Promise<void> {
+  /** Dragon breath: a roaring stream of purple-and-blue fire. */
+  private dragonBreath(shot: Shot): Promise<void> {
+    const big = shot.big;
+    const s = (big ? EFFECTS.superScale : 1) * shot.power;
+    const light = this.stage.lights.hold(DRAGON.light, 14 * s);
+    this.sounds.play("fire");
+    this.sounds.play("whoosh");
+    const dir = new THREE.Vector3().subVectors(shot.to, shot.from);
+    const time = big ? 1.4 : 0.9;
+    let hits = 0;
+    const p = new THREE.Vector3();
+    return this.clock
+      .tween(
+        time,
+        t => {
+          // A cone of flame pouring from its mouth, fanning out as it goes.
+          for (let k = 0; k < 4; k++) {
+            this.stage.glow.emit({
+              at: shot.from,
+              vel: dir
+                .clone()
+                .multiplyScalar(1.6 + Math.random() * 0.4)
+                .add(new THREE.Vector3(spread(0.5), spread(0.4), spread(0.5))),
+              life: [0.45, 0.6],
+              size: [0.15 * s, 0.75 * s],
+              color: [DRAGON.hot, DRAGON.edge],
+              alpha: [0.45, 0],
+              drag: 0.6,
+              gravity: -0.4,
+            });
+          }
+          p.lerpVectors(shot.from, shot.to, Math.min(1, t * 1.6));
+          light?.move(p);
+          // Hits land over and over while the breath pours onto it.
+          const due = Math.floor(t * (big ? 6 : 3));
+          while (hits < due) {
+            this.explode(shot.to, DRAGON, 0.5 * s, false);
+            this.sounds.play(hits % 2 ? "hit" : "fire");
+            this.shakeOnHit(shot);
+            shot.onImpact(hits);
+            hits++;
+          }
+        },
+        Ease.linear,
+      )
+      .then(() => {
+        light?.release();
+        this.sounds.play(big ? "superHit" : "hit");
+        this.shockwave(shot.to, DRAGON.light, s);
+        if (hits === 0) {
+          shot.onImpact(0);
+        }
+      });
+  }
+
+  /** Water: glossy jets streaking in, bursting into spray and mist. */
+  private waterJets(shot: Shot): Promise<void> {
     const big = shot.big;
     const s = (big ? EFFECTS.superScale : 1) * shot.power;
     const count = big ? 24 : 10;
@@ -446,10 +573,11 @@ export class Effects {
       stagger: EFFECTS.stagger * (big ? 0.4 : 0.6),
       make: () => {
         const g = new THREE.Group();
-        g.add(new THREE.Mesh(sphere, waterMat));
-        const core = new THREE.Mesh(sphere, shineMat);
-        core.scale.setScalar(0.45);
-        g.add(core);
+        g.add(new THREE.Mesh(sphere, water));
+        const tip = new THREE.Mesh(sphere, foam);
+        tip.scale.setScalar(0.55);
+        tip.position.z = 0.55;
+        g.add(tip);
         // Stretched along its flight: a jet, not a bubble.
         const r = (0.12 + Math.random() * 0.06) * s;
         g.scale.set(r, r, r * 3);
@@ -463,20 +591,41 @@ export class Effects {
       },
       frame: piece => {
         piece.lookAt(shot.to);
+        if (Math.random() < 0.6) {
+          this.stage.smoke.emit({
+            at: piece.position,
+            spread: 0.3,
+            life: [0.3, 0.5],
+            size: [0.1 * s, 0.4 * s],
+            color: [0xd8eeff, 0xa8d4ff],
+            alpha: [0.35, 0],
+          });
+        }
       },
       land: (at, i) => {
         this.stage.sparks.burst(at, {
-          color: WATER,
-          count: 16,
-          speed: 2.6 * s,
-          lift: 2.4,
-          gravity: 6,
+          color: [0x9cd4ff, 0xffffff, 0x3a8cff],
+          count: 18,
+          speed: 2.8 * s,
+          lift: 2.6,
+          gravity: 7,
           ttl: 0.6,
-          size: 1.2 * s,
+          size: 0.9 * s,
           spherical: 0.6,
+        });
+        this.stage.smoke.emit({
+          at,
+          count: 3,
+          spread: 1.2 * s,
+          life: [0.4, 0.7],
+          size: [0.3 * s, 1.0 * s],
+          color: [0xffffff, 0xcfe8ff],
+          alpha: [0.5, 0],
+          drag: 2,
         });
         if (i % 3 === 0) {
           this.sounds.play("hit");
+          this.stage.lights.flash(at, 0x8fd0ff, 5 * s, 0.25);
         }
         if (i === count - 1) {
           this.sounds.play(big ? "superHit" : "hit");
@@ -488,7 +637,7 @@ export class Effects {
     });
   }
 
-  /** A storm of thorns shot like arrows, with leaves torn up behind. */
+  /** A storm of thorns shot like arrows, with real leaves torn up behind. */
   private leaves(shot: Shot): Promise<void> {
     const big = shot.big;
     const s = (big ? EFFECTS.superScale : 1) * shot.power;
@@ -504,12 +653,11 @@ export class Effects {
       stagger: EFFECTS.stagger * (big ? 0.35 : 0.6),
       make: i => {
         const leaf = i % 3 === 2;
-        const m = new THREE.Mesh(leaf ? leafGeo : thornGeo, toon);
-        if (leaf) {
-          m.scale.set(0.15 * s, 0.03 * s, 0.08 * s);
-        } else {
-          m.scale.setScalar(s);
-        }
+        const m = new THREE.Mesh(
+          leaf ? leafGeo : thornGeo,
+          leaf ? leafMat : thornMat,
+        );
+        m.scale.setScalar(s);
         return m;
       },
       path: (t, i, out) => {
@@ -520,22 +668,28 @@ export class Effects {
         out.addScaledVector(side, Math.cos(a) * r);
         out.addScaledVector(lift, Math.sin(a) * r);
       },
-      frame: piece => {
-        // Point first, like an arrow.
-        piece.lookAt(shot.to);
+      frame: (piece, _t, dt, i) => {
+        if (i % 3 === 2) {
+          // Leaves tumble; thorns fly point first, like arrows.
+          piece.rotation.x += dt * 9;
+          piece.rotation.y += dt * 6;
+        } else {
+          piece.lookAt(shot.to);
+        }
       },
       land: (at, i) => {
         this.stage.sparks.burst(at, {
-          color: big && i % 2 ? THORN : LEAF,
-          count: 8,
+          color: [0x2f7d32, 0x9be36a, 0xd8b67a],
+          count: 9,
           speed: 2.2 * s,
           lift: 1.2,
           gravity: 3,
-          ttl: 0.5,
-          size: s,
+          ttl: 0.6,
+          size: 0.8 * s,
         });
         if (i % 4 === 0) {
           this.sounds.play("hit");
+          this.smokePuff(at, 0.25 * s, 0x5a6a3a);
         }
         if (i === count - 1) {
           this.sounds.play(big ? "superHit" : "hit");
@@ -547,26 +701,33 @@ export class Effects {
     });
   }
 
-  /** Lightning out of the sky onto the target, crackling as it goes. */
+  /**
+   * Lightning out of the sky onto the target: it glows, crackles with sparks
+   * all down its length, and lights up the whole roof.
+   */
   private async zap(shot: Shot): Promise<void> {
     const big = shot.big;
     const count = big ? 5 : 1;
     // Sparks gather on the attacker first, so it is clear who did it.
+    const charge = this.stage.lights.hold(ZAP.light, 6);
     await this.clock.tween(
       0.4,
       () => {
-        this.stage.sparks.burst(shot.from, {
-          color: SPARK,
-          count: 2,
-          speed: 1.4,
-          lift: 0.3,
-          gravity: 0,
-          ttl: 0.25,
-          spherical: 1,
+        this.stage.glow.emit({
+          at: shot.from,
+          count: 3,
+          jitter: 0.15,
+          spread: 1.4,
+          life: [0.15, 0.25],
+          size: [0.25, 0.02],
+          color: [ZAP.hot, ZAP.edge],
+          drag: 4,
         });
+        charge?.move(shot.from);
       },
       Ease.linear,
     );
+    charge?.release();
     for (let i = 0; i < count; i++) {
       const at = shot.to
         .clone()
@@ -580,19 +741,23 @@ export class Effects {
         at,
         (big ? 2.2 : 1.5) * shot.power,
       );
-      this.shockwave(at, 0xfff27a, big ? 1.4 : 1);
       this.stage.scene.add(bolt);
+      for (const p of bolt.userData.points as Array<THREE.Vector3>) {
+        this.stage.glow.emit({
+          at: p,
+          count: 3,
+          jitter: 0.12,
+          spread: 0.6,
+          life: [0.15, 0.3],
+          size: [0.7, 0.1],
+          color: [ZAP.hot, ZAP.edge],
+        });
+      }
+      this.explode(at, ZAP, 0.8 * shot.power, false);
+      this.stage.lights.flash(at, ZAP.light, 45, 0.35);
+      this.stage.flash(big ? 0.9 : 0.5);
+      this.shockwave(at, 0xbfe0ff, big ? 1.4 : 1);
       this.sounds.play("zap");
-      this.stage.sparks.burst(at, {
-        color: SPARK,
-        count: 50,
-        speed: 3.5,
-        lift: 1.2,
-        gravity: 3,
-        ttl: 0.55,
-        size: 1.3,
-        spherical: 0.8,
-      });
       this.sounds.play(big ? "superHit" : "hit");
       this.shakeOnHit(shot);
       shot.onImpact(i);
@@ -616,6 +781,7 @@ export class Effects {
     }
   }
 
+  /** Real boulders: lumpy, cracked stone, crashing down in a cloud of dust. */
   private rocks(shot: Shot): Promise<void> {
     const big = shot.big;
     const s = (big ? EFFECTS.superScale : 1) * shot.power;
@@ -639,9 +805,9 @@ export class Effects {
         ),
     );
     const spin = Array.from({length: count}, () => [
-      spread(8),
-      spread(8),
-      spread(8),
+      spread(6),
+      spread(6),
+      spread(6),
     ]);
     this.sounds.play("whoosh");
     return this.volley({
@@ -649,31 +815,50 @@ export class Effects {
       flight: EFFECTS.flight * 0.9,
       stagger: EFFECTS.stagger * 1.6,
       make: i => {
-        const m = new THREE.Mesh(rockGeo[i % rockGeo.length], toon);
-        m.scale.setScalar((0.3 + Math.random() * 0.12) * s);
+        const m = new THREE.Mesh(
+          rockGeos[i % rockGeos.length],
+          rockMats[i % rockMats.length],
+        );
+        m.scale.setScalar((0.28 + Math.random() * 0.12) * s);
+        m.rotation.set(Math.random() * 6, Math.random() * 6, 0);
         return m;
       },
       path: (t, i, out) => {
         // Falling, so it speeds up as it comes: t² on the way down.
         out.lerpVectors(starts[i], ends[i], t * t);
       },
-      frame: (piece, _t, dt) => {
-        const i = piece.id % count;
+      frame: (piece, _t, dt, i) => {
         piece.rotation.x += spin[i][0] * dt;
         piece.rotation.y += spin[i][1] * dt;
         piece.rotation.z += spin[i][2] * dt;
+        if (Math.random() < 0.3) {
+          this.smokePuff(piece.position, 0.12 * s, 0x6a6258);
+        }
       },
       land: (at, i) => {
+        // Chips flying, and dust rolling out along the ground.
         this.stage.sparks.burst(at, {
-          color: DUST,
-          count: 34,
-          speed: 3 * s,
-          lift: 1.4,
-          gravity: 4,
-          ttl: 0.6,
-          size: 1.4 * s,
-          spherical: 0.4,
+          color: [0x8a8378, 0x6d665e, 0xb0a593],
+          count: 22,
+          speed: 3.2 * s,
+          lift: 2,
+          gravity: 8,
+          ttl: 0.8,
+          size: 1.1 * s,
+          spherical: 0.5,
         });
+        for (let k = 0; k < 8; k++) {
+          this.stage.smoke.emit({
+            at: new THREE.Vector3(at.x, 0.2, at.z),
+            vel: new THREE.Vector3(spread(2.2 * s), 0.4, spread(2.2 * s)),
+            life: [0.9, 1.5],
+            size: [0.5 * s, 1.9 * s],
+            color: [0xb0a593, 0x8a8378],
+            alpha: [0.55, 0],
+            drag: 2.2,
+            gravity: -0.15,
+          });
+        }
         this.sounds.play("rock");
         this.shockwave(at, 0x8c857a, s);
         this.shakeOnHit(shot);
@@ -682,107 +867,58 @@ export class Effects {
     });
   }
 
-  /** Dragon breath: a roaring stream of purple-and-blue fire. */
-  private dragonBreath(shot: Shot): Promise<void> {
-    const big = shot.big;
-    const s = (big ? EFFECTS.superScale : 1) * shot.power;
-    const count = big ? 22 : 10;
-    const side = new THREE.Vector3()
-      .subVectors(shot.to, shot.from)
-      .cross(up)
-      .normalize();
-    const offset = Array.from({length: count}, () => [
-      spread(0.25),
-      spread(0.2),
-    ]);
-    this.sounds.play("fire");
-    this.sounds.play("whoosh");
-    return this.volley({
-      count,
-      flight: EFFECTS.flight * 0.7,
-      stagger: EFFECTS.stagger * 0.45,
-      make: () => {
-        const g = new THREE.Group();
-        g.add(new THREE.Mesh(sphere, dragonCore));
-        const shell = new THREE.Mesh(sphere, dragonShell);
-        shell.scale.setScalar(1.5);
-        g.add(shell);
-        g.scale.setScalar((0.12 + Math.random() * 0.08) * s);
-        return g;
-      },
-      path: (t, i, out) => {
-        // Fanning out a little as it goes, the way breath does.
-        out.lerpVectors(shot.from, shot.to, t);
-        out.addScaledVector(side, offset[i][0] * t * s);
-        out.y += offset[i][1] * t * s;
-      },
-      frame: piece => {
-        piece.scale.multiplyScalar(1.02);
-        this.stage.sparks.burst(piece.position, {
-          color: DRAGON,
-          count: 1,
-          speed: 0.3,
-          lift: 0.3,
-          gravity: -1,
-          ttl: 0.3,
-          size: s,
-        });
-      },
-      land: (at, i) => {
-        this.stage.sparks.burst(at, {
-          color: DRAGON,
-          count: 10,
-          speed: 2.4 * s,
-          lift: 1.2,
-          gravity: 2,
-          ttl: 0.5,
-          size: 1.2 * s,
-          spherical: 0.8,
-        });
-        if (i % 3 === 0) {
-          this.sounds.play("hit");
-        }
-        if (i === count - 1) {
-          this.sounds.play(big ? "superHit" : "hit");
-          this.shockwave(at, 0x9a5bff, s);
-        }
-        this.shakeOnHit(shot);
-        shot.onImpact(i);
-      },
-    });
-  }
-
-  /** Psychic power: glowing pink rings that pulse out and squeeze the target. */
+  /** Psychic power: glowing rings that pulse out and squeeze the target. */
   private psychic(shot: Shot): Promise<void> {
     const big = shot.big;
     const s = (big ? EFFECTS.superScale : 1) * shot.power;
     const count = big ? 9 : 4;
+    const lights = this.carried(count, PSYCHIC.light, 8 * s);
     this.sounds.play("charge");
     return this.volley({
       count,
       flight: EFFECTS.flight * 1.1,
       stagger: EFFECTS.stagger * 1.6,
-      make: () => new THREE.Mesh(psyRing, psyMat),
+      make: () => {
+        const ring = new THREE.Mesh(psyRing, psyMat);
+        ring.renderOrder = 4;
+        return ring;
+      },
       path: (t, _i, out) => {
         out.lerpVectors(shot.from, shot.to, t);
       },
-      frame: (piece, t) => {
+      frame: (piece, t, _dt, i) => {
         piece.lookAt(shot.to);
         // Grows as it flies, then shrinks tight round the target.
         const k = t < 0.8 ? 0.15 + t * 0.6 : 0.63 - (t - 0.8) * 2.2;
         piece.scale.setScalar(Math.max(0.05, k) * s);
+        // A shimmer of light round its rim.
+        const a = Math.random() * Math.PI * 2;
+        const r = piece.scale.x;
+        const rim = new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r, 0)
+          .applyQuaternion(piece.quaternion)
+          .add(piece.position);
+        this.stage.glow.emit({
+          at: rim,
+          count: 2,
+          spread: 0.2,
+          life: [0.3, 0.5],
+          size: [0.25 * s, 0.02],
+          color: [PSYCHIC.hot, PSYCHIC.edge],
+        });
+        lights[i]?.move(piece.position);
       },
       land: (at, i) => {
-        this.stage.sparks.burst(at, {
-          color: PSYCHIC,
-          count: 14,
-          speed: 1.6 * s,
-          lift: 0.4,
-          gravity: -0.5,
-          ttl: 0.7,
-          size: 1.2 * s,
-          spherical: 1,
+        lights[i]?.release();
+        this.stage.glow.emit({
+          at,
+          count: 30,
+          spread: 1.8 * s,
+          life: [0.4, 0.8],
+          size: [0.4 * s, 0.05],
+          color: [PSYCHIC.hot, PSYCHIC.edge],
+          drag: 2,
         });
+        this.stage.lights.flash(at, PSYCHIC.light, 14 * s, 0.35);
         this.sounds.play(i === count - 1 ? (big ? "superHit" : "hit") : "tap");
         if (i === count - 1) {
           this.shockwave(at, 0xff5ecf, s * 1.2);
@@ -803,6 +939,7 @@ export class Effects {
         .clone()
         .add(new THREE.Vector3(spread(0.3), spread(0.3), spread(0.3))),
     );
+    const lights = this.carried(count, PUNCH.light, 7 * s);
     this.sounds.play("whoosh");
     return this.volley({
       count,
@@ -820,29 +957,20 @@ export class Effects {
           knuckle.position.set(-0.45 + k * 0.3, 0.3, 0.95);
           g.add(knuckle);
         }
-        const glow = new THREE.Mesh(sphere, fistGlow);
-        glow.scale.setScalar(1.5);
-        g.add(glow);
         g.scale.setScalar(0.2 * s);
         return g;
       },
       path: (t, i, out) => {
         out.lerpVectors(shot.from, ends[i], t);
       },
-      frame: piece => {
+      frame: (piece, _t, _dt, i) => {
         piece.lookAt(shot.to);
+        this.flame(piece.position, PUNCH, 0.14 * s, 3);
+        lights[i]?.move(piece.position);
       },
       land: (at, i) => {
-        this.stage.sparks.burst(at, {
-          color: PUNCH,
-          count: 16,
-          speed: 3 * s,
-          lift: 0.6,
-          gravity: 1,
-          ttl: 0.4,
-          size: 1.3 * s,
-          spherical: 1,
-        });
+        lights[i]?.release();
+        this.explode(at, PUNCH, 0.55 * s, false);
         this.sounds.play(big && i === count - 1 ? "superHit" : "hit");
         if (i === count - 1) {
           this.shockwave(at, 0xffb03a, s);
@@ -853,22 +981,30 @@ export class Effects {
     });
   }
 
-  /** Dark power: black spikes burst up out of the ground under the target. */
+  /** Dark power: black glass spikes burst up out of the ground round it. */
   private async shadow(shot: Shot): Promise<void> {
     const big = shot.big;
     const s = (big ? EFFECTS.superScale : 1) * shot.power;
     const count = big ? 12 : 5;
     const ground = new THREE.Vector3(shot.to.x, 0, shot.to.z);
-    // A pool of darkness spreads under it first.
-    this.stage.sparks.burst(ground, {
-      color: SHADOW,
-      count: 30,
-      speed: 1.5,
-      lift: 0.3,
-      gravity: 0,
-      ttl: 0.6,
-      size: 1.2,
-    });
+    // A pool of darkness spreads under it first, with a cold purple glow.
+    for (let k = 0; k < 10; k++) {
+      this.stage.smoke.emit({
+        at: ground,
+        vel: new THREE.Vector3(spread(1.5), 0.2, spread(1.5)),
+        life: [0.8, 1.2],
+        size: [0.6 * s, 1.6 * s],
+        color: [0x0a0410, 0x1a0a2a],
+        alpha: [0.7, 0],
+        drag: 2,
+      });
+    }
+    this.stage.lights.flash(
+      new THREE.Vector3(ground.x, 0.4, ground.z),
+      SHADOW.light,
+      14 * s,
+      1.4,
+    );
     this.sounds.play("rise");
     await this.clock.wait(0.35);
     const spikes: Array<Promise<void>> = [];
@@ -892,25 +1028,22 @@ export class Effects {
     shot: Shot,
     count: number,
   ): Promise<void> {
-    const g = new THREE.Group();
-    g.add(new THREE.Mesh(spikeGeo, spikeMat));
-    const glow = new THREE.Mesh(spikeGeo, spikeGlow);
-    glow.scale.set(1.35, 1.05, 1.35);
-    g.add(glow);
-    g.position.copy(at);
-    g.rotation.set(spread(0.3), 0, spread(0.3));
+    const m = new THREE.Mesh(spikeGeo, obsidian);
+    m.position.copy(at);
+    m.rotation.set(spread(0.3), Math.random() * 6, spread(0.3));
     const h = (1.1 + Math.random() * 0.6) * s;
-    this.stage.scene.add(g);
+    this.stage.scene.add(m);
     await this.clock.tween(
       0.16,
       t => {
-        g.scale.set(s, h * t + 0.01, s);
-        g.position.y = h * 0.6 * t - 0.1;
+        m.scale.set(s, h * t + 0.01, s);
+        m.position.y = h * 0.6 * t - 0.1;
       },
       Ease.out,
     );
+    this.flame(new THREE.Vector3(at.x, 0.15, at.z), SHADOW, 0.3 * s, 10);
     this.stage.sparks.burst(at, {
-      color: SHADOW,
+      color: [0x9a5bff, 0x2a1040, 0xff3b5c],
       count: 10,
       speed: 2 * s,
       lift: 1.5,
@@ -927,11 +1060,11 @@ export class Effects {
     await this.clock.tween(
       0.25,
       t => {
-        g.scale.y = (h + 0.01) * (1 - t) + 0.01;
-        g.position.y = h * 0.6 * (1 - t) - 0.1;
+        m.scale.y = (h + 0.01) * (1 - t) + 0.01;
+        m.position.y = h * 0.6 * (1 - t) - 0.1;
       },
       Ease.in,
     );
-    this.stage.scene.remove(g);
+    this.stage.scene.remove(m);
   }
 }

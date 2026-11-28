@@ -3,6 +3,8 @@ import {ParticleBurst} from "../../shared/particles";
 import {ARENA, BOSS, CAMERA, CITY, EFFECTS, STORM} from "./config";
 import {mulberry} from "./anim";
 import {makeBolt} from "./effects";
+import {Emitter, FxLights} from "./fx";
+import {RoomEnvironment} from "three/examples/jsm/environments/RoomEnvironment.js";
 import {outlined} from "./models";
 import {Parts} from "./parts";
 
@@ -30,6 +32,12 @@ export class Stage {
   readonly sparks = new ParticleBurst(600, 0.07, false);
   /** Paper confetti for winning. */
   readonly confetti = new ParticleBurst(360, 0.08, false, "paper");
+  /** Glowing particles: fire, sparks, magic. They add light to the scene. */
+  readonly glow = new Emitter(2400, true);
+  /** Smoke, dust and mist. */
+  readonly smoke = new Emitter(700, false);
+  /** Lights an attack can carry or flash. */
+  readonly lights: FxLights;
   /** Which way is right on screen, along the ground. */
   readonly screenRight = new THREE.Vector3();
   /** Called as the thunder arrives after each flash, to play its sound. */
@@ -89,13 +97,30 @@ export class Stage {
     this.moon.position.set(-4, 10, 7);
     this.scene.add(this.moon);
 
+    this.lights = new FxLights(this.scene, 4);
+    // Something for shiny things — water, obsidian, a fist — to reflect: a
+    // soft room of light, turned down for a night scene. Only the attacks'
+    // shiny materials use it; the cartoon beasts and the city don't.
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pmrem.fromScene(
+      new RoomEnvironment(),
+      0.04,
+    ).texture;
+    this.scene.environmentIntensity = 0.45;
+    pmrem.dispose();
+
     this.buildSky();
     this.buildArena();
     this.buildCity();
     const {lines, drops} = this.buildRain();
     this.rain = lines;
     this.drops = drops;
-    this.scene.add(this.sparks.mesh, this.confetti.mesh);
+    this.scene.add(
+      this.sparks.mesh,
+      this.confetti.mesh,
+      this.glow.points,
+      this.smoke.points,
+    );
 
     window.addEventListener("resize", () => this.resize());
     this.resize();
@@ -475,9 +500,23 @@ export class Stage {
     this.rain.geometry.attributes.position.needsUpdate = true;
   }
 
+  /** The whole scene lights up for a moment, as if from a blinding flash. */
+  flash(strength = 1): void {
+    this.flashLeft = Math.max(this.flashLeft, STORM.flash * strength);
+  }
+
   update(dt: number): void {
     this.sparks.update(dt);
     this.confetti.update(dt);
+    // World size to pixels for the particles: the screen's height in device
+    // pixels over the height the view spans one unit away.
+    const scale =
+      this.renderer.domElement.height /
+      2 /
+      Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    this.glow.update(dt, scale);
+    this.smoke.update(dt, scale);
+    this.lights.update(dt);
     this.storm(dt);
     // A slow sway so the scene never looks frozen, even while it waits.
     this.drift += dt;

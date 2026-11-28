@@ -105,6 +105,15 @@ Nine kinds, each with its own special move:
 | 🥊 Fighting | a flurry of glowing fists                        |
 | 🌑 Dark     | black spikes bursting out of the ground round it |
 
+The attacks are meant to look real (`src/fx.ts`): fire and magic are
+hundreds of soft glowing particles that add their light together, so they burn
+white where they're thickest and fade to their colour at the edges; smoke and
+dust roll up after them; a fireball, a ring or a fist carries a real light
+that shines on the floor and on both beasts, and every blast flashes one;
+rocks are lumpy boulders with a cracked stone texture and bumps that catch the
+light; water and the dark kind's obsidian spikes are glossy and reflect a soft
+room of light; and lightning lights up the whole roof.
+
 Who beats whom is `STRONG_AGAINST` in `src/critters.ts`: every kind is strong
 against at least one other and weak against at least one other. The five
 starters are the first five kinds; generated beasts cycle through all nine,
@@ -172,7 +181,8 @@ src/
   cards.ts     card art drawn on a canvas, with a portrait rendered from the model
   stage.ts     renderer, the darkness city and its storm, camera, particles
   battle.ts    one battle as a script: summon, turns, hits, faint
-  effects.ts   fireballs, bubbles, leaves, lightning, falling rocks
+  effects.ts   every special move: fire, water, thorns, lightning, rocks…
+  fx.ts        glowing particles, smoke, attack lights, rock and leaf textures
   anim.ts      a clock whose waits and tweens are promises
   ui.ts        pick screen, puff panels, moves, popups, result card
   audio.ts     every sound synthesised with Web Audio
