@@ -1,4 +1,4 @@
-import type {Move} from "./critters";
+import type {Kind, Move} from "./critters";
 
 // What a move does, read from its name, so it does what it says: Big Punch
 // throws a punch, Fang Bite bites, Tail Swipe swings the tail round, Geyser
@@ -119,4 +119,74 @@ export function styleOf(move: Move): Style {
     }
   }
   return {ranged: "volley"};
+}
+
+/**
+ * How a beast reacts to being hit, so every kind of hit looks different:
+ * punched, its head snaps back; burned, it hops about with flames on it;
+ * zapped, it shakes and flickers; soaked, it shakes itself off like a dog.
+ */
+export type Reaction =
+  | "head"
+  | "side"
+  | "spin"
+  | "flatten"
+  | "burn"
+  | "shock"
+  | "wet"
+  | "float"
+  | "shadow"
+  | "squeeze";
+
+const BY_KIND: Record<Kind, Reaction> = {
+  fire: "burn",
+  water: "wet",
+  leaf: "side",
+  spark: "shock",
+  rock: "flatten",
+  dragon: "burn",
+  psychic: "float",
+  fighting: "head",
+  dark: "shadow",
+};
+
+const BY_MELEE: Record<Melee, Reaction> = {
+  bite: "head",
+  punch: "head",
+  kick: "head",
+  ram: "head",
+  slash: "side",
+  pounce: "side",
+  sting: "side",
+  tail: "spin",
+  slam: "flatten",
+  squeeze: "squeeze",
+  spit: "shadow",
+};
+
+const BY_RANGED: Partial<Record<Ranged, Reaction>> = {
+  meteor: "flatten",
+  vortex: "spin",
+  blackHole: "spin",
+  jaws: "head",
+  slashes: "side",
+  bloom: "float",
+  crush: "squeeze",
+  stars: "float",
+  bubbles: "wet",
+};
+
+export function reactionOf(style: Style, kind: Kind): Reaction {
+  if ("melee" in style) {
+    return BY_MELEE[style.melee];
+  }
+  return BY_RANGED[style.ranged] ?? BY_KIND[kind];
+}
+
+/** The hits worth slowing time down for: the big, satisfying ones. */
+export function isHeavy(style: Style): boolean {
+  if ("melee" in style) {
+    return ["punch", "kick", "ram", "slam", "bite"].includes(style.melee);
+  }
+  return ["meteor", "jaws", "blackHole"].includes(style.ranged);
 }

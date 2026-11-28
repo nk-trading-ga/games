@@ -64,8 +64,10 @@ class Game {
   };
 
   step(dt: number): void {
-    this.clock.update(dt);
-    this.stage.update(dt);
+    // Slow motion slows everything: the battle, the beasts, every spark.
+    const scaled = dt * this.clock.speed(dt);
+    this.clock.update(scaled);
+    this.stage.update(scaled);
     this.stage.render();
   }
 

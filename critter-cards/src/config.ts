@@ -241,3 +241,17 @@ export const BOSS = {
   /** Seconds between flashes of lightning while a boss is out. */
   stormGap: [0.8, 2] as const,
 };
+
+export const LIVELY = {
+  /** The boxer's bounce: how high, and how fast. */
+  bounce: 0.05,
+  bounceRate: 5,
+  /** Swaying side to side and rocking forward and back, in radians. */
+  sway: 0.06,
+  rock: 0.05,
+  /** Seconds between showing off — a jab, a roar, a hop — as [least, most]. */
+  tauntGap: [3, 6] as const,
+  /** Slow motion for a big hit: how slow, and for how long in real seconds. */
+  slowScale: 0.22,
+  slowTime: 0.55,
+};

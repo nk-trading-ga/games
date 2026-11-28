@@ -9,6 +9,30 @@ export class Clock {
 
   /** Seconds since the game started, paused with it. */
   time = 0;
+  private slowLeft = 0;
+  private slowFor = 1;
+  private slowest = 1;
+
+  /**
+   * Slow motion: everything runs at `scale` of its speed for `seconds` of
+   * real time, easing back to full speed at the end.
+   */
+  slow(scale: number, seconds: number): void {
+    this.slowest = scale;
+    this.slowFor = seconds;
+    this.slowLeft = seconds;
+  }
+
+  /** How fast time runs this frame, counting down any slow motion. */
+  speed(realDt: number): number {
+    if (this.slowLeft <= 0) {
+      return 1;
+    }
+    this.slowLeft -= realDt;
+    const left = Math.max(0, this.slowLeft / this.slowFor);
+    // Held slow for most of it, then back up to speed over the last third.
+    return left > 0.33 ? this.slowest : lerp(1, this.slowest, left / 0.33);
+  }
 
   update(dt: number): void {
     this.time += dt;

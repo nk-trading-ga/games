@@ -9,6 +9,7 @@ import {
   EVOLVE,
   BOSS,
   HUNT,
+  LIVELY,
   FORM_SCALE,
   MOTION,
   TIMING,
@@ -21,7 +22,7 @@ import {
   type Move,
 } from "./critters";
 import {statsOf} from "./dex";
-import {styleOf, type Melee} from "./moves";
+import {isHeavy, reactionOf, styleOf, type Melee, type Reaction} from "./moves";
 import {Effects} from "./effects";
 import {buildCritter, type CritterModel} from "./models";
 import type {Stage} from "./stage";
@@ -63,9 +64,29 @@ interface Fighter {
   out: boolean;
   /** How much bigger than a normal beast: a boss is huge. */
   bigness: number;
+  /** Its body's pose now, and the pose it is moving toward. */
+  pose: Pose;
+  poseTo: Pose;
+  /** How it is reacting to being hit, if it is. */
+  react: {type: Reaction; t: number; time: number; sign: number} | null;
+  /** Showing off between turns: a jab, a roar, a hop. */
+  taunt: {type: "jab" | "roar" | "hop"; t: number} | null;
+  nextTaunt: number;
+  /** Taking its turn: no showing off in the middle of an attack. */
+  busy: boolean;
   /** A boss below half its puff: glowing red, hitting harder. */
   enraged: boolean;
 }
+
+/** How a beast holds itself: leaning, twisting, crouched or stretched up. */
+interface Pose {
+  lean: number;
+  twist: number;
+  crouch: number;
+  stretch: number;
+}
+
+const STILL: Pose = {lean: 0, twist: 0, crouch: 0, stretch: 0};
 
 export type Outcome = "won" | "lost" | "caught" | "fled";
 
@@ -199,23 +220,181 @@ export class Battle {
       out: false,
       bigness,
       enraged: false,
+      pose: {...STILL},
+      poseTo: {...STILL},
+      react: null,
+      taunt: null,
+      nextTaunt: 2 + Math.random() * 3,
+      busy: false,
     };
   }
 
   /** Breathing, the hit flash and the squash: the model only, never the root. */
+  /**
+   * Everything the model does on its own, every frame: breathing, a boxer's
+   * bounce and sway, showing off, leaning into its attacks, and reacting to
+   * being hit. It all writes to the model only, never to the root the battle
+   * moves about, so none of it fights a tackle or a knock-back.
+   */
   private animate(f: Fighter, dt: number): void {
     const t = this.clock.time;
-    const breathe = Math.sin(
-      t * MOTION.breatheRate + (f.side === "foe" ? 1.7 : 0),
-    );
+    const phase = f.side === "foe" ? 1.7 : 0;
+    const breathe = Math.sin(t * MOTION.breatheRate + phase);
     f.squash *= Math.exp(-dt * 9);
     const sq = MOTION.breathe * breathe - f.squash;
+
+    // Ready to fight: bouncing on its feet, swaying, rocking.
+    const alive = f.out ? 1 : 0;
+    let y =
+      Math.abs(Math.sin(t * LIVELY.bounceRate + phase)) * LIVELY.bounce * alive;
+    let rx = Math.sin(t * 0.9 + phase) * LIVELY.rock * alive;
+    let ry = 0;
+    let rz = Math.sin(t * 1.3 + phase) * LIVELY.sway * alive;
+    let x = 0;
+    let z = 0;
+    let sx = 1 - sq * 0.6;
+    let sy = 1 + sq;
+    let sz = 1 - sq * 0.6;
+
+    // The pose it is moving into, for an attack: smoothly, not snapping.
+    const ease = Math.min(1, dt * 14);
+    for (const key of Object.keys(f.pose) as Array<keyof Pose>) {
+      f.pose[key] += (f.poseTo[key] - f.pose[key]) * ease;
+    }
+    rx += f.pose.lean;
+    ry += f.pose.twist;
+    sy *= 1 - f.pose.crouch + f.pose.stretch;
+    sx *= 1 + f.pose.crouch * 0.5;
+    sz *= 1 + f.pose.crouch * 0.5;
+
+    // Now and then, between turns, it shows off.
+    if (f.out && !f.busy && !f.react) {
+      f.nextTaunt -= dt;
+      if (f.nextTaunt <= 0 && !f.taunt) {
+        const kinds = ["jab", "roar", "hop"] as const;
+        f.taunt = {type: kinds[Math.floor(Math.random() * 3)], t: 0};
+        const [lo, hi] = LIVELY.tauntGap;
+        f.nextTaunt = lo + Math.random() * (hi - lo);
+      }
+    }
+    if (f.taunt) {
+      f.taunt.t += dt;
+      const u = f.taunt.t;
+      if (f.taunt.type === "jab") {
+        // Two quick jabs at the air.
+        const j = Math.max(0, Math.sin(u * Math.PI * 4)) * (u < 0.5 ? 1 : 0);
+        rx += j * 0.35;
+        z += j * 0.18;
+      } else if (f.taunt.type === "roar") {
+        const r = Math.sin(Math.min(1, u / 0.8) * Math.PI);
+        rx -= r * 0.35;
+        sy *= 1 + r * 0.12;
+        if (u > 0.2 && u - dt <= 0.2) {
+          this.sounds.cry(f.critter);
+        }
+      } else {
+        y += Math.max(0, Math.sin(u * Math.PI * 3)) * 0.35 * (u < 1 ? 1 : 0);
+      }
+      if (u > 1) {
+        f.taunt = null;
+      }
+    }
+
+    // Reacting to a hit: a different reaction for every kind of hit.
+    let tint: [number, number, number] | null = null;
+    if (f.react) {
+      const r = f.react;
+      r.t += dt;
+      const u = Math.min(1, r.t / r.time);
+      // Snaps over at once, then springs back with a wobble.
+      const spring =
+        u < 0.12
+          ? u / 0.12
+          : Math.exp(-5 * (u - 0.12)) * Math.cos(11 * (u - 0.12));
+      switch (r.type) {
+        case "head":
+          // Rocked back on its heels, head thrown back.
+          rx -= 0.75 * spring;
+          y += 0.15 * Math.max(0, spring);
+          break;
+        case "side":
+          rz += 0.55 * spring * r.sign;
+          ry += 0.3 * spring * r.sign;
+          break;
+        case "spin":
+          ry += (1 - (1 - u) ** 3) * Math.PI * 2;
+          rz += Math.sin(u * 20) * 0.2 * (1 - u);
+          break;
+        case "flatten":
+          sy *= 1 - 0.5 * Math.max(0, spring);
+          sx *= 1 + 0.35 * Math.max(0, spring);
+          sz *= 1 + 0.35 * Math.max(0, spring);
+          break;
+        case "burn":
+          // Hopping from foot to foot, too hot to stand still.
+          y += Math.abs(Math.sin(u * 18)) * 0.28 * (1 - u);
+          rz += Math.sin(u * 30) * 0.1 * (1 - u);
+          tint = [
+            0.9 * (1 - u) * (0.6 + Math.random() * 0.4),
+            0.3 * (1 - u),
+            0,
+          ];
+          break;
+        case "shock":
+          // Jolting and flickering with the current going through it.
+          if (u < 0.85) {
+            x += (Math.random() - 0.5) * 0.12;
+            z += (Math.random() - 0.5) * 0.12;
+            rx += (Math.random() - 0.5) * 0.3;
+            rz += (Math.random() - 0.5) * 0.3;
+            const on = Math.random() < 0.5 ? 0.8 : 0.1;
+            tint = [on * 0.7, on * 0.8, on];
+          }
+          break;
+        case "wet":
+          // Shaking itself off, like a dog out of the sea.
+          ry += Math.sin(u * 45) * 0.4 * (1 - u);
+          rx -= 0.2 * Math.max(0, spring);
+          break;
+        case "float": {
+          // Lifted off the ground by a mind, turning helplessly, then dropped.
+          const lift =
+            u < 0.7 ? Math.sin((u / 0.7) * (Math.PI / 2)) : 1 - (u - 0.7) / 0.3;
+          y += lift * 0.7;
+          rz += Math.sin(u * 12) * 0.25 * lift;
+          rx += Math.sin(u * 9) * 0.2 * lift;
+          tint = [0.5 * lift, 0.1 * lift, 0.4 * lift];
+          break;
+        }
+        case "shadow":
+          // Shrinking and shuddering as the dark wraps round it.
+          sx *= 1 - 0.15 * (1 - u);
+          sy *= 1 - 0.15 * (1 - u);
+          sz *= 1 - 0.15 * (1 - u);
+          rz += (Math.random() - 0.5) * 0.12 * (1 - u);
+          tint = [0.25 * (1 - u), 0, 0.4 * (1 - u)];
+          break;
+        case "squeeze": {
+          const p = Math.abs(Math.sin(u * Math.PI * 3)) * (1 - u);
+          sx *= 1 - 0.3 * p;
+          sz *= 1 - 0.3 * p;
+          sy *= 1 + 0.22 * p;
+          break;
+        }
+      }
+      if (u >= 1) {
+        f.react = null;
+      }
+    }
+
     const k = f.bigness;
-    f.model.group.scale.set(
-      (1 - sq * 0.6) * k,
-      (1 + sq) * k,
-      (1 - sq * 0.6) * k,
-    );
+    f.model.group.scale.set(sx * k, sy * k, sz * k);
+    f.model.group.rotation.set(rx, ry, rz);
+    f.model.group.position.set(x, y, z);
+    if (tint && f.flash <= 0) {
+      f.model.material.emissive.setRGB(...tint);
+      return;
+    }
     f.flash = Math.max(0, f.flash - dt);
     const hit = f.flash > 0 ? Math.min(1, f.flash / TIMING.hitFlash) : 0;
     const w = Math.max(hit, f.glow);
@@ -479,22 +658,31 @@ export class Battle {
 
     // The damage lands with the first piece to hit; every piece after it just
     // knocks the target about.
+    // What it does is read from what it's called: see moves.ts; and how the
+    // target reacts depends on what hit it.
+    const style = styleOf(move);
+    const reaction = reactionOf(style, attacker.critter.kind);
     let landed = false;
     const onImpact = () => {
+      let heavy = false;
       if (!landed) {
         landed = true;
         this.land(attacker, target, move);
+        // Slow motion for the big hits, every super move, and a knockout.
+        heavy = isHeavy(style) || big || target.puff <= 0;
       }
-      this.knock(target, attacker);
+      this.knock(target, attacker, reaction, heavy);
     };
-
-    // What it does is read from what it's called: see moves.ts.
-    const style = styleOf(move);
+    attacker.busy = true;
+    attacker.taunt = null;
     if ("melee" in style) {
       await this.melee(style.melee, attacker, target, onImpact, big);
     } else {
-      // A little rear back and spring forward as it lets go.
-      await this.hop(attacker, 0.25, 0.25);
+      // Rears back, winding up, then throws itself forward as it lets go.
+      attacker.poseTo = {lean: -0.4, twist: 0, crouch: 0.12, stretch: 0};
+      await this.clock.wait(0.22);
+      attacker.poseTo = {lean: 0.35, twist: 0, crouch: 0, stretch: 0.1};
+      void this.hop(attacker, 0.2, 0.25);
       const shot = {
         from: this.mouth(attacker),
         to: this.middle(target),
@@ -509,6 +697,8 @@ export class Battle {
       }
     }
 
+    attacker.poseTo = {...STILL};
+    attacker.busy = false;
     attacker.charge = big ? 0 : attacker.charge + 1;
     await this.clock.wait(0.35);
   }
@@ -559,10 +749,24 @@ export class Battle {
             : style === "ram"
               ? 0.24
               : MOTION.tackleOut;
+    // Winding up first: crouched, leaning back, twisting for a punch.
+    const windTwist = style === "punch" ? -0.6 : style === "tail" ? 0.5 : 0;
+    a.poseTo = {lean: -0.45, twist: windTwist, crouch: 0.2, stretch: 0};
+    await this.clock.wait(style === "slam" ? 0.3 : 0.2);
+    // Then throwing its whole body into it.
+    a.poseTo = {
+      lean: style === "slam" ? -0.2 : 0.5,
+      twist: style === "punch" ? 0.45 : 0,
+      crouch: 0,
+      stretch: style === "pounce" || style === "slam" ? 0.15 : 0.08,
+    };
     this.sounds.play("whoosh");
     await this.clock.tween(
       time,
       t => {
+        if (style === "slam" && t > 0.5) {
+          a.poseTo.lean = 0.6;
+        }
         a.root.position.lerpVectors(from, to, t);
         a.root.position.y = Math.sin(Math.PI * t) * height;
         if (style === "kick") {
@@ -694,6 +898,7 @@ export class Battle {
       spherical: 0.7,
     });
 
+    a.poseTo = {...STILL};
     const back = a.root.position.clone();
     await this.clock.tween(
       MOTION.tackleBack,
@@ -738,20 +943,120 @@ export class Battle {
   }
 
   /** Flash white and rock back from the hit, then settle. */
-  private knock(target: Fighter, from: Fighter): void {
+  /** Flash white, rock back from the hit, and react to what hit it. */
+  private knock(
+    target: Fighter,
+    from: Fighter,
+    reaction: Reaction = "side",
+    heavy = false,
+  ): void {
     target.flash = TIMING.hitFlash;
     target.squash = 0.18;
+    target.taunt = null;
+    const times: Record<Reaction, number> = {
+      head: 0.9,
+      side: 0.7,
+      spin: 1.0,
+      flatten: 0.8,
+      burn: 1.4,
+      shock: 0.8,
+      wet: 1.0,
+      float: 1.5,
+      shadow: 1.1,
+      squeeze: 0.9,
+    };
+    target.react = {
+      type: reaction,
+      t: 0,
+      time: times[reaction],
+      sign: Math.random() < 0.5 ? -1 : 1,
+    };
+    if (heavy) {
+      this.clock.slow(LIVELY.slowScale, LIVELY.slowTime);
+      this.stage.shake(0.18, 0.5);
+    }
+    // Some reactions leave something behind: flames, sparks, drips, smoke.
+    this.trail(target, reaction);
     const away = target.spot.clone().sub(from.spot).setY(0).normalize();
+    const push = reaction === "head" ? 1.5 : reaction === "flatten" ? 0.4 : 1;
     let t = 0;
     this.clock.every(dt => {
       t += dt;
-      const k = Math.sin(Math.min(1, t / 0.4) * Math.PI);
+      const k = Math.sin(Math.min(1, t / 0.4) * Math.PI) * push;
       target.root.position.set(
         target.spot.x + away.x * MOTION.knockback * k,
         target.root.position.y,
         target.spot.z + away.z * MOTION.knockback * k,
       );
       return t >= 0.4;
+    });
+  }
+
+  /** What clings to a beast for a moment after a hit. */
+  private trail(f: Fighter, reaction: Reaction): void {
+    const top = 1.4 * this.size(f);
+    let t = 0;
+    this.clock.every(dt => {
+      t += dt;
+      const at = new THREE.Vector3(
+        f.root.position.x + (Math.random() - 0.5) * 0.7 * this.size(f),
+        Math.random() * top,
+        f.root.position.z + (Math.random() - 0.5) * 0.7 * this.size(f),
+      );
+      if (reaction === "burn") {
+        this.stage.glow.emit({
+          at,
+          count: 2,
+          spread: 0.3,
+          life: [0.3, 0.5],
+          size: [0.35, 0.05],
+          color: [0xffb84a, 0xc82400],
+          alpha: [0.6, 0],
+          gravity: -2,
+        });
+      } else if (reaction === "shock") {
+        this.stage.glow.emit({
+          at,
+          spread: 1.5,
+          life: [0.08, 0.15],
+          size: [0.25, 0.02],
+          color: [0xffffff, 0x5aa8ff],
+        });
+      } else if (reaction === "wet") {
+        this.stage.sparks.burst(at, {
+          color: [0x9cd4ff, 0xffffff],
+          count: 1,
+          speed: 2.5,
+          lift: 1,
+          gravity: 7,
+          ttl: 0.5,
+          size: 0.6,
+          spherical: 0.3,
+        });
+      } else if (reaction === "shadow") {
+        this.stage.smoke.emit({
+          at,
+          spread: 0.3,
+          life: [0.5, 0.8],
+          size: [0.2, 0.6],
+          color: [0x0a0410, 0x1a0a2a],
+          alpha: [0.5, 0],
+          gravity: -0.6,
+        });
+      } else if (reaction === "float" && Math.random() < 0.5) {
+        this.stage.glow.emit({
+          at,
+          spread: 0.3,
+          life: [0.3, 0.5],
+          size: [0.2, 0.02],
+          color: [0xffa8e6, 0xc0108a],
+        });
+      }
+      const long = reaction === "burn" ? 1.3 : reaction === "float" ? 1.4 : 0.8;
+      return (
+        t > long ||
+        !["burn", "shock", "wet", "shadow", "float"].includes(reaction)
+      );
     });
   }
 

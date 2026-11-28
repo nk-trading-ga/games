@@ -129,6 +129,23 @@ is giant jaws; a cloud smothers; a bloom is a giant flower opening; a crush
 closes in and squeezes; stars rain down. Anything else is its kind's own
 throw. Each comes in its kind's colours and materials.
 
+**They never stand still.** Out of their cards they bounce on their feet like
+boxers, sway and rock, and now and then show off — two quick jabs at the air,
+a roar, a hop. To attack they wind up first, crouching and leaning back (and
+twisting, for a punch), then throw their whole body into it.
+
+**They react to being hit, differently for each kind of hit**
+(`reactionOf` in `src/moves.ts`): punched, kicked, rammed or bitten, the head
+snaps back and it rocks on its heels; slashed, it twists away; a tail swipe or
+a whirlpool spins it round; stomped or hit by a meteor, it squashes flat;
+burned, it hops from foot to foot glowing, with flames licking off it; zapped,
+it jolts and flickers with sparks; soaked, it shakes itself off like a dog;
+psychic power lifts it off the ground, turning, and drops it; the dark makes it
+shrink and shudder in black smoke; squeezed, it's squished thin. The big hits
+— punches, kicks, rams, slams, bites, meteors, every super move, and a
+knockout — go into **slow motion** for a moment (`LIVELY` in
+`src/config.ts`).
+
 Who beats whom is `STRONG_AGAINST` in `src/critters.ts`: every kind is strong
 against at least one other and weak against at least one other. The five
 starters are the first five kinds; generated beasts cycle through all nine,
