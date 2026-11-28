@@ -114,6 +114,21 @@ rocks are lumpy boulders with a cracked stone texture and bumps that catch the
 light; water and the dark kind's obsidian spikes are glossy and reflect a soft
 room of light; and lightning lights up the whole roof.
 
+**Every move does what it is called** (`src/moves.ts` reads the name). Up
+close: a bite snaps giant jaws shut, a punch throws a glowing fist, a kick is a
+spinning kick, a tail swipe turns a full circle, a stomp or a slam leaps high
+and crashes down in a cloud of dust, a sting darts in with a needle, a squeeze
+wraps coils round the target, a headbutt or a ram charges flat out and leaves
+stars spinning round its head, and an ink splat spits. From a distance: a
+meteor falls burning out of the sky; a geyser, a volcano, roots or an
+earthquake burst up out of the ground; a tsunami, a flood or a heat wave rolls
+across the roof as a wall; a roar, a pulse or a shock wave blasts out in
+rings; a whirlpool or a hurricane spins round the target; a black hole sucks
+everything in and bursts; a cannon or a beam is one long blazing beam; a fang
+is giant jaws; a cloud smothers; a bloom is a giant flower opening; a crush
+closes in and squeezes; stars rain down. Anything else is its kind's own
+throw. Each comes in its kind's colours and materials.
+
 Who beats whom is `STRONG_AGAINST` in `src/critters.ts`: every kind is strong
 against at least one other and weak against at least one other. The five
 starters are the first five kinds; generated beasts cycle through all nine,
@@ -181,7 +196,8 @@ src/
   cards.ts     card art drawn on a canvas, with a portrait rendered from the model
   stage.ts     renderer, the darkness city and its storm, camera, particles
   battle.ts    one battle as a script: summon, turns, hits, faint
-  effects.ts   every special move: fire, water, thorns, lightning, rocks…
+  moves.ts     what each move does, read from its name
+  effects.ts   every move's look: fire, water, meteors, beams, jaws, coils…
   fx.ts        glowing particles, smoke, attack lights, rock and leaf textures
   anim.ts      a clock whose waits and tweens are promises
   ui.ts        pick screen, puff panels, moves, popups, result card

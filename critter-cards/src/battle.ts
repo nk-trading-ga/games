@@ -21,6 +21,7 @@ import {
   type Move,
 } from "./critters";
 import {statsOf} from "./dex";
+import {styleOf, type Melee} from "./moves";
 import {Effects} from "./effects";
 import {buildCritter, type CritterModel} from "./models";
 import type {Stage} from "./stage";
@@ -487,59 +488,222 @@ export class Battle {
       this.knock(target, attacker);
     };
 
-    if (move.effect === "tackle") {
-      await this.tackle(attacker, target, onImpact);
+    // What it does is read from what it's called: see moves.ts.
+    const style = styleOf(move);
+    if ("melee" in style) {
+      await this.melee(style.melee, attacker, target, onImpact, big);
     } else {
       // A little rear back and spring forward as it lets go.
       await this.hop(attacker, 0.25, 0.25);
-      await this.effects.play(move.effect, {
+      const shot = {
         from: this.mouth(attacker),
         to: this.middle(target),
         big,
         power: this.size(attacker),
         onImpact,
-      });
+      };
+      if (style.ranged === "volley") {
+        await this.effects.play(move.effect, shot);
+      } else {
+        await this.effects.styled(style.ranged, attacker.critter.kind, shot);
+      }
     }
 
     attacker.charge = big ? 0 : attacker.charge + 1;
     await this.clock.wait(0.35);
   }
 
-  private async tackle(a: Fighter, target: Fighter, onImpact: () => void) {
-    this.sounds.play("whoosh");
+  /**
+   * A hit up close: it runs in and does what the move is called — bites,
+   * punches, kicks, swings its tail, jumps and slams down — then goes back.
+   */
+  private async melee(
+    style: Melee,
+    a: Fighter,
+    target: Fighter,
+    onImpact: () => void,
+    big: boolean,
+  ) {
+    const k = this.size(a);
     const from = a.spot.clone();
-    const to = a.spot.clone().lerp(target.spot, MOTION.tackleReach);
+    const reach = {
+      punch: 0.6,
+      sting: 0.75,
+      squeeze: 0.6,
+      ram: 0.8,
+      pounce: 0.8,
+      slam: 0.72,
+      tail: 0.55,
+      spit: 0.25,
+    } as Partial<Record<Melee, number>>;
+    const to = a.spot
+      .clone()
+      .lerp(target.spot, reach[style] ?? MOTION.tackleReach);
+    const hitAt = this.middle(target);
+    // How it gets there: a hop, a high leap, a flat-out charge, a spin.
+    const height =
+      style === "slam"
+        ? 2.2 * k
+        : style === "pounce"
+          ? 1.4
+          : style === "ram" || style === "sting"
+            ? 0
+            : 0.45;
+    const time =
+      style === "slam"
+        ? 0.6
+        : style === "pounce"
+          ? 0.45
+          : style === "sting"
+            ? 0.14
+            : style === "ram"
+              ? 0.24
+              : MOTION.tackleOut;
+    this.sounds.play("whoosh");
     await this.clock.tween(
-      MOTION.tackleOut,
+      time,
       t => {
         a.root.position.lerpVectors(from, to, t);
-        a.root.position.y = Math.sin(Math.PI * t) * 0.45;
+        a.root.position.y = Math.sin(Math.PI * t) * height;
+        if (style === "kick") {
+          a.root.rotation.y = a.yaw + t * Math.PI * 2;
+        }
       },
-      Ease.in,
+      style === "slam" ? Ease.linear : Ease.in,
     );
-    this.stage.sparks.burst(this.middle(target), {
+    a.root.rotation.y = a.yaw;
+    const mouth = this.mouth(a);
+
+    switch (style) {
+      case "bite":
+        this.sounds.play("superHit");
+        onImpact();
+        await this.effects.jaws(hitAt, 1.1 * k);
+        break;
+      case "punch":
+        await this.effects.punch(mouth, hitAt, k * (big ? 1.5 : 1));
+        this.sounds.play("superHit");
+        this.stage.shake(0.14, 0.3);
+        onImpact();
+        break;
+      case "kick":
+        this.effects.shockwave(target.spot, 0xffb03a, 1.2);
+        this.sounds.play("superHit");
+        this.stage.shake(0.14, 0.3);
+        onImpact();
+        await this.effects.punch(mouth, hitAt, k * 0.8);
+        break;
+      case "tail":
+        // A full turn on the spot, the tail sweeping through the target.
+        await this.clock.tween(
+          0.45,
+          t => {
+            a.root.rotation.y = a.yaw + t * Math.PI * 2;
+            this.effects.swoosh(a.root.position, 0.9 * k, a.critter.light, t);
+            if (t >= 0.5 && t - 0.05 < 0.5) {
+              this.sounds.play("superHit");
+              onImpact();
+            }
+          },
+          Ease.inOut,
+        );
+        a.root.rotation.y = a.yaw;
+        break;
+      case "slam":
+        // Down it comes: the roof shakes and dust rolls out.
+        this.sounds.play("rock");
+        this.sounds.play("superHit");
+        this.effects.shockwave(to, 0xffffff, 2);
+        this.stage.shake(0.3, 0.6);
+        for (let i = 0; i < 12; i++) {
+          this.stage.smoke.emit({
+            at: new THREE.Vector3(to.x, 0.2, to.z),
+            vel: new THREE.Vector3(Math.cos(i) * 3, 0.3, Math.sin(i) * 3),
+            life: [0.7, 1.1],
+            size: [0.4, 1.4],
+            color: [0x8a8378, 0x6a6258],
+            alpha: [0.5, 0],
+            drag: 2.5,
+          });
+        }
+        onImpact();
+        break;
+      case "sting":
+        await this.effects.sting(mouth, hitAt);
+        this.sounds.play("superHit");
+        onImpact();
+        break;
+      case "squeeze": {
+        let first = true;
+        await this.effects.coil(
+          target.spot,
+          a.critter.colour,
+          this.size(target),
+          () => {
+            if (first) {
+              first = false;
+              onImpact();
+            } else {
+              this.knock(target, a);
+            }
+          },
+        );
+        break;
+      }
+      case "ram":
+        this.sounds.play("superHit");
+        this.effects.shockwave(target.spot, 0xffffff, 1.4);
+        this.stage.shake(0.2, 0.4);
+        onImpact();
+        this.effects.dizzy(
+          new THREE.Vector3(
+            target.spot.x,
+            1.8 * this.size(target),
+            target.spot.z,
+          ),
+        );
+        break;
+      case "spit":
+        await this.effects.spit(
+          mouth,
+          hitAt,
+          a.critter.kind === "dark" || /ink/i.test(a.critter.moves[0].name)
+            ? 0x120a18
+            : 0x5ac83a,
+        );
+        this.sounds.play("hit");
+        onImpact();
+        break;
+      case "pounce":
+      case "slash":
+        this.sounds.play("superHit");
+        void this.effects.slash(hitAt, style === "pounce" ? 1.3 : 1);
+        this.effects.shockwave(target.spot, 0xffffff);
+        this.stage.shake(0.1, 0.3);
+        onImpact();
+        break;
+    }
+    this.stage.sparks.burst(hitAt, {
       color: [0xffffff, 0xffe14a, a.critter.colour],
-      count: 24,
+      count: 20,
       speed: 2.6,
       lift: 1,
       gravity: 3,
       ttl: 0.5,
-      size: 1.2,
+      size: 1.1,
       spherical: 0.7,
     });
-    this.sounds.play("superHit");
-    void this.effects.slash(this.middle(target));
-    this.effects.shockwave(target.spot, 0xffffff);
-    this.stage.shake(0.1, 0.3);
-    onImpact();
+
+    const back = a.root.position.clone();
     await this.clock.tween(
       MOTION.tackleBack,
       t => {
-        a.root.position.lerpVectors(to, from, t);
+        a.root.position.lerpVectors(back, from, t);
         a.root.position.y = Math.sin(Math.PI * t) * 0.3;
       },
       Ease.out,
     );
+    a.root.position.copy(from);
   }
 
   /** Works out the damage, takes it off, and shows how much. */
