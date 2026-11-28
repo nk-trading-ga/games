@@ -228,8 +228,10 @@ export const BOSS = {
    * enraged, so a Mega beast's 170 puff lasts the eleven or so turns it takes
    * to bring down his 360.
    */
-  puff: [200, 230, 260, 290, 320, 360] as const,
-  hitScale: [0.35, 0.36, 0.37, 0.38, 0.38, 0.4] as const,
+  puff: [200, 215, 230, 245, 260, 275, 290, 305, 320, 360] as const,
+  hitScale: [
+    0.35, 0.35, 0.36, 0.36, 0.37, 0.37, 0.38, 0.38, 0.38, 0.4,
+  ] as const,
   /** Below this much of its puff, a boss is enraged: it glows and hits harder. */
   rageAt: 0.5,
   rageHit: 1.3,

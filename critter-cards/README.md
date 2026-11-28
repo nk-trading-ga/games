@@ -58,10 +58,10 @@ is drawn the first time a card is wanted, and the latest 90 are kept.
 
 **Home** has six things to do:
 
-- **👹 Boss Battles** — six bosses, one after another: a giant Mega beast of
-  each kind, each on a different body plan (the Lord of Flames, the Terror of
-  the Deep, the Jungle Tyrant, the Storm Emperor, the Mountain Breaker), and
-  last the Darkness King, Ruler of the Darkness. A boss arrives with a
+- **👹 Boss Battles** — ten bosses, one after another: a giant Mega beast of
+  each of the nine kinds, each on a different body plan (from the Lord of
+  Flames to the Shadow Lord), and last the Darkness King, Ruler of the
+  Darkness. A boss arrives with a
   warning, a storm of lightning and the ground shaking, and climbs out of a
   huge hole; it is half as big again as a beast (never so tall its head leaves
   the screen) and has a long puff bar. At half puff it is **enraged** — it
@@ -88,6 +88,27 @@ is drawn the first time a card is wanted, and the latest 90 are kept.
 
 The odds, prizes and catch chances are `PACKS` and `HUNT` in
 `src/config.ts`.
+
+## Kinds
+
+Nine kinds, each with its own special move:
+
+| Kind        | Special move looks like                          |
+| ----------- | ------------------------------------------------ |
+| 🔥 Fire     | fireballs                                        |
+| 💧 Water    | jets of water                                    |
+| 🍃 Leaf     | thorns shot like arrows                          |
+| ⚡ Spark    | lightning out of the sky                         |
+| 🪨 Rock     | boulders falling                                 |
+| 🐲 Dragon   | a stream of purple-and-blue dragon fire          |
+| 🔮 Psychic  | glowing pink rings that squeeze the target       |
+| 🥊 Fighting | a flurry of glowing fists                        |
+| 🌑 Dark     | black spikes bursting out of the ground round it |
+
+Who beats whom is `STRONG_AGAINST` in `src/critters.ts`: every kind is strong
+against at least one other and weak against at least one other. The five
+starters are the first five kinds; generated beasts cycle through all nine,
+and there is a boss for each kind — ten bosses with the Darkness King.
 
 ## Evolution and Mega Evolution
 

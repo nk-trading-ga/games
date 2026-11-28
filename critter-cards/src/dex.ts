@@ -22,7 +22,17 @@ import {mulberry} from "./anim";
 // species has three forms — first, evolved, Mega — so three cards, and the
 // thousandth card is one beast of its own.
 
-const KINDS: ReadonlyArray<Kind> = ["fire", "water", "leaf", "spark", "rock"];
+const KINDS: ReadonlyArray<Kind> = [
+  "fire",
+  "water",
+  "leaf",
+  "spark",
+  "rock",
+  "dragon",
+  "psychic",
+  "fighting",
+  "dark",
+];
 const BODIES: ReadonlyArray<Body> = [
   "wolf",
   "shark",
@@ -59,6 +69,22 @@ const PREFIX: Record<Kind, readonly [Array<string>, Array<string>]> = {
   rock: [
     ["Stone", "Crag", "Flint", "Slate", "Grit", "Shale", "Cliff", "Rubble"],
     ["Granite", "Obsidian", "Quake", "Basalt", "Onyx", "Tremor", "Summit"],
+  ],
+  dragon: [
+    ["Drako", "Wyvern", "Scale", "Fang", "Ember", "Talon", "Rune", "Claw"],
+    ["Elder", "Ancient", "Sky", "Storm", "Royal", "Titan", "Dread"],
+  ],
+  psychic: [
+    ["Psi", "Mind", "Dream", "Glimmer", "Hex", "Rune", "Aura", "Echo"],
+    ["Astral", "Cosmic", "Mystic", "Oracle", "Phantom", "Nebula", "Prism"],
+  ],
+  fighting: [
+    ["Brawl", "Punch", "Kick", "Bash", "Grapple", "Jab", "Rumble", "Tuff"],
+    ["Champion", "Warrior", "Gladiator", "Brute", "Knockout", "Iron"],
+  ],
+  dark: [
+    ["Shade", "Gloom", "Murk", "Night", "Dusk", "Grim", "Hollow", "Void"],
+    ["Shadow", "Midnight", "Eclipse", "Nightmare", "Abyssal", "Doom"],
   ],
 };
 
@@ -99,6 +125,22 @@ const PALETTE: Record<Kind, {body: Array<number>; accent: Array<number>}> = {
   rock: {
     body: [0x6d665e, 0x8a7a6a, 0x5c554e, 0x4a4a5a, 0x9a8a7a, 0x2a2630],
     accent: [0xff6a1f, 0xb06bff, 0x5fe0ff, 0xffd23a],
+  },
+  dragon: {
+    body: [0x5a3fd6, 0x2a7a8a, 0x7a2a6a, 0x3a5a9a, 0x8a3a3a, 0x2a2a5a],
+    accent: [0x9a5bff, 0x3fb0ff, 0xffd23a, 0xff5ecf],
+  },
+  psychic: {
+    body: [0xd65aa8, 0x9a5bd6, 0xe08ac8, 0x6a4ab8, 0xc84a8a, 0x8a6ae0],
+    accent: [0xff5ecf, 0xffb3e6, 0x8ff7ff, 0xffffff],
+  },
+  fighting: {
+    body: [0xb8501a, 0x8a3a2a, 0xc87a3a, 0x6a4a3a, 0xa83a3a, 0x9a6a4a],
+    accent: [0xffb03a, 0xffffff, 0xffd23a, 0xff3b3b],
+  },
+  dark: {
+    body: [0x2a2438, 0x1a1a24, 0x3a2a4a, 0x241a2a, 0x2a3040, 0x3a1a2a],
+    accent: [0x9a5bff, 0xff3b5c, 0x5fe0ff, 0xffd23a],
   },
 };
 
@@ -171,6 +213,10 @@ const SPECIAL: Record<Kind, {effect: Move["effect"]; icon: string}> = {
   leaf: {effect: "leaves", icon: "🌵"},
   spark: {effect: "zap", icon: "⚡"},
   rock: {effect: "rocks", icon: "🪨"},
+  dragon: {effect: "dragon", icon: "🐲"},
+  psychic: {effect: "psychic", icon: "🔮"},
+  fighting: {effect: "punch", icon: "🥊"},
+  dark: {effect: "shadow", icon: "🌑"},
 };
 
 const SPECIAL_NAMES: Record<Kind, readonly [Array<string>, Array<string>]> = {
@@ -193,6 +239,34 @@ const SPECIAL_NAMES: Record<Kind, readonly [Array<string>, Array<string>]> = {
   rock: [
     ["Boulder Drop", "Rock Throw", "Stone Rain", "Gravel Blast", "Rock Fall"],
     ["Earthquake", "Rock Slide", "Avalanche", "Mountain Fall", "Landslide"],
+  ],
+  dragon: [
+    ["Dragon Breath", "Dragon Rage", "Scale Storm", "Wyrm Fire", "Roar Blast"],
+    [
+      "Dragon Fury",
+      "Sky Inferno",
+      "Ancient Roar",
+      "Star Breath",
+      "Dragon Storm",
+    ],
+  ],
+  psychic: [
+    ["Mind Blast", "Psi Wave", "Brain Burst", "Hex Ring", "Dream Pulse"],
+    ["Mind Crush", "Cosmic Wave", "Astral Storm", "Psychic Fury", "Star Mind"],
+  ],
+  fighting: [
+    ["Power Punch", "Fist Flurry", "Mega Kick", "Combo Hit", "Jab Storm"],
+    [
+      "Knockout Blow",
+      "Thousand Fists",
+      "Champion Smash",
+      "Iron Fist",
+      "Fury Combo",
+    ],
+  ],
+  dark: [
+    ["Shadow Spike", "Night Slash", "Gloom Burst", "Dark Pulse", "Void Fang"],
+    ["Midnight Doom", "Eclipse", "Nightmare", "Shadow Storm", "Black Hole"],
   ],
 };
 
@@ -217,6 +291,10 @@ const NATURE: Record<Kind, string> = {
   leaf: "covered in thorns and vines.",
   spark: "crackling with lightning.",
   rock: "as hard as a mountain.",
+  dragon: "with the power of the ancient dragons.",
+  psychic: "that can move things with its mind.",
+  fighting: "that never backs down from a fight.",
+  dark: "that hides in the shadows.",
 };
 
 const HOMES: Record<Kind, Array<string>> = {
@@ -225,6 +303,10 @@ const HOMES: Record<Kind, Array<string>> = {
   leaf: ["the overgrown park", "the vine tower", "the rooftop jungle"],
   spark: ["the power station", "the lightning tower", "the neon alleys"],
   rock: ["the old quarry", "the broken bridge", "the deep tunnels"],
+  dragon: ["the dragon spire", "the cloud tops", "the old castle"],
+  psychic: ["the mirror maze", "the glowing tower", "the dream library"],
+  fighting: ["the fight club roof", "the old gym", "the boxing ring"],
+  dark: ["the dark alleys", "the shadow tunnels", "the haunted station"],
 };
 
 const FACTS = [
@@ -501,13 +583,17 @@ const BOSS_TITLES: Record<Kind, string> = {
   leaf: "Jungle Tyrant",
   spark: "Storm Emperor",
   rock: "Mountain Breaker",
+  dragon: "Dragon Overlord",
+  psychic: "Master of Minds",
+  fighting: "Undefeated Champion",
+  dark: "Shadow Lord",
 };
 
 export const BOSSES: ReadonlyArray<BossDef> = [
   ...KINDS.map((kind, i) => {
     // A generated beast of each kind in its Mega form, each on a different
     // body plan so no two bosses look alike.
-    const body = BODIES[i];
+    const body = BODIES[i % BODIES.length];
     const big = SPECIES.find(
       c =>
         c.index >= CRITTERS.length &&

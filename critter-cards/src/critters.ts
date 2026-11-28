@@ -2,11 +2,29 @@
 // built by hand; dex.ts makes the rest of the thousand cards from the same
 // five body plans and adds them to SPECIES.
 
-export type Kind = "fire" | "water" | "leaf" | "spark" | "rock";
+export type Kind =
+  | "fire"
+  | "water"
+  | "leaf"
+  | "spark"
+  | "rock"
+  | "dragon"
+  | "psychic"
+  | "fighting"
+  | "dark";
 
 /** What a move looks like when it is used. */
 export type EffectKind =
-  "tackle" | "fireball" | "bubbles" | "leaves" | "zap" | "rocks";
+  | "tackle"
+  | "fireball"
+  | "bubbles"
+  | "leaves"
+  | "zap"
+  | "rocks"
+  | "dragon"
+  | "psychic"
+  | "punch"
+  | "shadow";
 
 export interface Move {
   name: string;
@@ -119,6 +137,10 @@ export const KIND_ICON: Record<Kind, string> = {
   leaf: "🍃",
   spark: "⚡",
   rock: "🪨",
+  dragon: "🐲",
+  psychic: "🔮",
+  fighting: "🥊",
+  dark: "🌑",
 };
 
 export const KIND_NAME: Record<Kind, string> = {
@@ -127,13 +149,20 @@ export const KIND_NAME: Record<Kind, string> = {
   leaf: "Leaf",
   spark: "Spark",
   rock: "Rock",
+  dragon: "Dragon",
+  psychic: "Psychic",
+  fighting: "Fighting",
+  dark: "Dark",
 };
 
 /**
  * Who is strong against whom. Water puts out fire, fire burns leaves, leaves
  * drink up water and crack rock, spark zaps water, rock smothers fire and
- * shrugs off spark. Each kind is strong against at least one other and weak
- * against at least one other, so no pick is a bad pick.
+ * shrugs off spark. Dragons are strong against dragons and shrug off spark;
+ * psychic minds outwit fighters; fighters punch through rock and dark; and
+ * the dark swallows psychic powers and dragons alike. Each kind is strong
+ * against at least one other and weak against at least one other, so no pick
+ * is a bad pick.
  */
 export const STRONG_AGAINST: Record<Kind, ReadonlyArray<Kind>> = {
   fire: ["leaf"],
@@ -141,6 +170,10 @@ export const STRONG_AGAINST: Record<Kind, ReadonlyArray<Kind>> = {
   leaf: ["water", "rock"],
   spark: ["water"],
   rock: ["fire", "spark"],
+  dragon: ["dragon", "spark"],
+  psychic: ["fighting"],
+  fighting: ["rock", "dark"],
+  dark: ["psychic", "dragon"],
 };
 
 export const CRITTERS: ReadonlyArray<Critter> = [
